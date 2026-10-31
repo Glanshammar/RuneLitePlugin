@@ -13,7 +13,7 @@ public class TreeOverlay extends Overlay {
 
     private final Supplier<List<TreeDetector.TreeInfo>> treeSupplier;
 
-    TreeOverlay(Supplier<List<TreeDetector.TreeInfo>> treeSupplier) {
+    public TreeOverlay(Supplier<List<TreeDetector.TreeInfo>> treeSupplier) {
         this.treeSupplier = treeSupplier;
         setPosition(OverlayPosition.DYNAMIC);
         setLayer(OverlayLayer.ABOVE_SCENE);
