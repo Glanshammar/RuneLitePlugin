@@ -72,12 +72,6 @@ public class Apexea extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick event) {
 		visibleTrees = treeDetector.findTrees();
-		if (visibleTrees.isEmpty()) {
-			log.debug("No trees found");
-		} else {
-			log.debug("Found {} trees: {}", visibleTrees.size(),
-					visibleTrees.get(0).getName());
-		}
 	}
 
 	@Provides
