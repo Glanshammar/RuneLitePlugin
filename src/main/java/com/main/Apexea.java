@@ -2,6 +2,9 @@ package com.main;
 
 import com.google.inject.Provides;
 import javax.inject.Inject;
+
+import com.main.woodcutting.TreeDetector;
+import com.main.woodcutting.TreeOverlay;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.ObjectID;
@@ -12,10 +15,8 @@ import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
-import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayManager;
 
-import java.awt.*;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
