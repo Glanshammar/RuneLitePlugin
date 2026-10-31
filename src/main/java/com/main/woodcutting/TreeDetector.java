@@ -1,25 +1,21 @@
-package com.main;
+package com.main.woodcutting;
 
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
 import net.runelite.api.Point;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
-import net.runelite.client.ui.overlay.Overlay;
-import net.runelite.client.ui.overlay.OverlayLayer;
-import net.runelite.client.ui.overlay.OverlayPosition;
 
 import java.awt.*;
 import java.util.*;
 import java.util.List;
-import java.util.function.Supplier;
 
 @Slf4j
 public class TreeDetector {
 
     private final Client client;
     private final Set<Integer> targetIds;
-    private static final int SCENE_SIZE = 104; // Constants.SCENE_SIZE
+    private static final int SCENE_SIZE = 104;
 
     public TreeDetector(Client client, Set<Integer> targetIds) {
         this.client = client;
@@ -46,9 +42,6 @@ public class TreeDetector {
         int plane = client.getPlane();
 
         List<TreeInfo> results = new ArrayList<>();
-        // A tree's footprint spans multiple tiles, so the same GameObject is
-        // returned by tile.getGameObjects() from several (x, y) positions.
-        // Dedupe on (id, worldLocation).
         Set<Long> seen = new HashSet<>();
 
         for (int x = 0; x < SCENE_SIZE; x++) {
@@ -68,21 +61,19 @@ public class TreeDetector {
 
                     WorldPoint objPos = obj.getWorldLocation();
 
-                    // Unique key per object (id + origin tile).
                     long key = ((long) objectId << 32)
                             ^ ((long) objPos.getX() << 16)
                             ^ objPos.getY();
                     if (!seen.add(key)) {
-                        continue; // already recorded this object from another tile
+                        continue;
                     }
 
                     LocalPoint localPoint = LocalPoint.fromWorld(client, objPos);
-                    if (localPoint == null) continue; // outside the loaded scene
+                    if (localPoint == null) continue;
 
                     Point canvasPoint = Perspective.localToCanvas(client, localPoint, plane);
-                    if (canvasPoint == null) continue; // behind camera / off-screen
+                    if (canvasPoint == null) continue;
 
-                    // Name is only used for display now, never for filtering.
                     ObjectComposition def = client.getObjectDefinition(objectId);
                     String name = (def != null && def.getName() != null)
                             ? def.getName()
@@ -107,29 +98,8 @@ public class TreeDetector {
         String name;
         WorldPoint worldPosition;
         int distance;
-        Point canvasPos;   // net.runelite.api.Point
+        Point canvasPos;
         int objectId;
     }
 }
 
-class TreeOverlay extends Overlay {
-
-    private final Supplier<List<TreeDetector.TreeInfo>> treeSupplier;
-
-    TreeOverlay(Supplier<List<TreeDetector.TreeInfo>> treeSupplier) {
-        this.treeSupplier = treeSupplier;
-        setPosition(OverlayPosition.DYNAMIC);
-        setLayer(OverlayLayer.ABOVE_SCENE);
-    }
-
-    @Override
-    public Dimension render(Graphics2D graphics) {
-        for (TreeDetector.TreeInfo tree : treeSupplier.get()) {
-            Point p = tree.getCanvasPos();
-            graphics.setColor(Color.RED);
-            graphics.drawOval(p.getX() - 10, p.getY() - 10, 20, 20);
-            graphics.drawString(tree.getName() + " (" + tree.getDistance() + "t)", p.getX(), p.getY() - 15);
-        }
-        return null;
-    }
-}
