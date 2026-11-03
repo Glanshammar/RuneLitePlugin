@@ -5,10 +5,9 @@ import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.client.eventbus.Subscribe;
-import net.runelite.client.plugins.Plugin;
 
 @Slf4j
-public class AntiBotDetector extends Plugin {
+public class AntiBotDetector {
 
     private final Client client;
     private final Runnable onCheckDetected;
