@@ -27,7 +27,7 @@ public class WidgetPublisher {
         addWidget(widgets, "logout", client.getWidget(InterfaceID.LOGOUT, 69));
     }
 
-    public void publishWidgets() {
+    public void publish() {
         if (ipcServer == null) return;
         ipcServer.publishWidgets(widgets);
     }

@@ -5,6 +5,7 @@ import javax.inject.Inject;
 
 import com.main.ipc.IpcServer;
 import com.main.ipc.WidgetPublisher;
+import com.main.ipc.PlayerPublisher;
 import com.main.utils.ObjectScanner;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
@@ -16,7 +17,7 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
-import com.main.woodcutting.WoodcuttingBot;
+import com.main.skills.WoodcuttingBot;
 
 import java.io.IOException;
 
@@ -38,6 +39,7 @@ public class Apexea extends Plugin
 	private WoodcuttingBot woodcuttingBot;
 	private ObjectScanner objectScanner;
 	private WidgetPublisher widgetPublisher;
+	private PlayerPublisher playerPublisher;
 
 	@Override
 	protected void startUp() {
@@ -55,6 +57,8 @@ public class Apexea extends Plugin
 		eventBus.register(woodcuttingBot);
 		widgetPublisher = new WidgetPublisher(client, ipcServer);
 		eventBus.register(widgetPublisher);
+		playerPublisher = new PlayerPublisher(client, ipcServer);
+		eventBus.register(playerPublisher);
 
 		widgetPublisher.start();
 
@@ -70,6 +74,7 @@ public class Apexea extends Plugin
 		eventBus.unregister(antiBotDetector);
 		eventBus.unregister(objectScanner);
 		eventBus.unregister(widgetPublisher);
+		eventBus.unregister(playerPublisher);
 
 		configManager.setConfiguration(CONFIG_GROUP, "botWC", "false");
 		configManager.setConfiguration(CONFIG_GROUP, "botCrabs", "false");
@@ -89,7 +94,8 @@ public class Apexea extends Plugin
 
 	@Subscribe
 	public void onGameTick(GameTick event) {
-		widgetPublisher.publishWidgets();
+		widgetPublisher.publish();
+		playerPublisher.publish();
 	}
 
 	@Provides

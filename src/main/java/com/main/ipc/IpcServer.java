@@ -1,9 +1,7 @@
 package com.main.ipc;
 
 import com.google.gson.Gson;
-import com.main.data.ObjectDto;
-import com.main.data.WcStatusDto;
-import com.main.data.WidgetDto;
+import com.main.data.*;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +23,7 @@ public class IpcServer {
     private volatile String latestWcStatusJson = "{}";
     private volatile String latestObjectsJson = "[]";
     private volatile String latestWidgetsJson = "[]";
+    private volatile String latestPlayerJson = "{}";
 
     public IpcServer(int port) throws IOException {
         server = HttpServer.create(
@@ -33,14 +32,15 @@ public class IpcServer {
         server.createContext("/wc-status", exchange -> respond(exchange, latestWcStatusJson));
         server.createContext("/objects", exchange -> respond(exchange, latestObjectsJson));
         server.createContext("/widgets", exchange -> respond(exchange, latestWidgetsJson));
+        server.createContext("/player", exchange -> respond(exchange, latestPlayerJson));
 
-        server.setExecutor(Executors.newSingleThreadExecutor(r -> {
-            Thread thread = new Thread(r, "apexea-ipc");
+        server.setExecutor(Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "apexea-ipc");
             thread.setDaemon(true);
             return thread;
         }));
         server.start();
-        log.info("IPC listening on http://127.0.0.1:{}/trees and /wc-status", port);
+        log.info("IPC listening on http://127.0.0.1:{}/*", port);
     }
 
     private void respond(HttpExchange exchange, String json) throws IOException {
@@ -62,4 +62,5 @@ public class IpcServer {
     public void publishStatus(WcStatusDto status)     { latestWcStatusJson = gson.toJson(status); }
     public void publishObjects(List<ObjectDto> objects) { latestObjectsJson = gson.toJson(objects); }
     public void publishWidgets(List<WidgetDto> widgets) { latestWidgetsJson = gson.toJson(widgets); }
+    public void publishCombat(PlayerDto combat) { latestPlayerJson = gson.toJson(combat); }
 }
