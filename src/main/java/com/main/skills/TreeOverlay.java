@@ -1,4 +1,4 @@
-package com.main.woodcutting;
+package com.main.skills;
 
 import com.main.utils.ObjectScanner;
 import net.runelite.api.Point;

@@ -1,4 +1,4 @@
-package com.main.woodcutting;
+package com.main.skills;
 
 import com.main.ApexeaConfig;
 import com.main.ipc.IpcServer;
