@@ -25,25 +25,25 @@ public interface ApexeaConfig extends Config
     String botSection = "Bots";
 
     @ConfigItem(
-            keyName = "botWC",
-            name = "Woodcutting bot",
+            keyName = "botWoodcutting",
+            name = "Woodcutting",
             description = "Runs the Woodcutting bot",
             section = botSection,
             position = 0
     )
-    default boolean botWC()
+    default boolean botWoodcutting()
     {
         return false;
     }
 
     @ConfigItem(
-            keyName = "botCrabs",
-            name = "Sand crabs bot",
-            description = "Runs the sand crabs bot",
+            keyName = "botThieveStalls",
+            name = "Thieving Stalls",
+            description = "Runs the thieving stalls bot",
             section = botSection,
             position = 1
     )
-    default boolean botCrabs()
+    default boolean botThieveStalls()
     {
         return false;
     }
