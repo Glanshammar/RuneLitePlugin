@@ -1,7 +1,6 @@
 package com.main.utils;
 
 import com.main.ApexeaConfig;
-import com.main.ipc.IpcServer;
 import com.main.data.ObjectDto;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
@@ -21,12 +20,10 @@ public class ObjectScanner {
 
     private final Client client;
     private final ApexeaConfig config;
-    private final IpcServer ipcServer;
     public final Set<Integer> objectIds = new HashSet<>();
 
-    public ObjectScanner(Client client, IpcServer ipcServer, ApexeaConfig config) {
+    public ObjectScanner(Client client, ApexeaConfig config) {
         this.client = client;
-        this.ipcServer = ipcServer;
         this.config = config;
     }
 
@@ -44,6 +41,12 @@ public class ObjectScanner {
         NPC npc;                // NPC only
         Tile tile;              // GROUND_ITEM only (needed by Clicker)
         TileItem tileItem;      // GROUND_ITEM only
+    }
+
+    public void addObjectIds(Set<Integer> ids){
+        if (ids != null) {
+            objectIds.addAll(ids);
+        }
     }
 
     // ============================================================
@@ -225,55 +228,5 @@ public class ObjectScanner {
 
     public List<Target> findAll(Set<Integer> ids) {
         return findAll(ids, ids, ids);
-    }
-
-    // ============================================================
-    //  PUBLISHERS
-    // ============================================================
-    public void addObjectIds(Set<Integer> ids){
-        if (ids != null) {
-            objectIds.addAll(ids);
-        }
-    }
-
-    public void publishObjects() {
-        if (ipcServer == null) return;
-
-        Player player = client.getLocalPlayer();
-        if (player == null) return;
-        WorldPoint playerPos = player.getWorldLocation();
-        if (playerPos == null) return;
-
-        var canvas = client.getCanvas();
-        List<ObjectDto> dtos = new ArrayList<>();
-
-        for (var object : findGameObjects(objectIds)) {
-            var wp = object.getWorldPosition();
-            if (wp == null) continue;
-
-            Point center = Calculate.objectCenter(object.getGameObject());
-            if(center == null)
-                log.warn("Center is null");
-
-            int screenX = -1, screenY = -1;
-            if (canvas != null && center != null) {
-                var screen = SwingUtilities.convertPoint(
-                        canvas, new java.awt.Point(center.getX(), center.getY()), null);
-                screenX = screen.x;
-                screenY = screen.y;
-            }
-
-            dtos.add(new ObjectDto(
-                    object.getName(),
-                    object.getId(),
-                    wp.getX(), wp.getY(), wp.getPlane(),
-                    center != null ? center.getX() : -1,
-                    center != null ? center.getY() : -1,
-                    screenX, screenY,
-                    playerPos.distanceTo(wp)
-            ));
-        }
-
-        ipcServer.publishObjects(dtos);
     }
 }

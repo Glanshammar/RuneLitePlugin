@@ -1,15 +1,13 @@
 package com.main;
 
-import com.google.inject.Provides;
 import javax.inject.Inject;
 
-import com.main.ipc.IpcServer;
-import com.main.ipc.WidgetPublisher;
-import com.main.ipc.PlayerPublisher;
+import com.google.inject.Provides;
 import com.main.utils.ObjectScanner;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.EventBus;
@@ -18,8 +16,6 @@ import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import com.main.skills.WoodcuttingBot;
-
-import java.io.IOException;
 
 @Slf4j
 @PluginDescriptor(
@@ -34,33 +30,18 @@ public class Apexea extends Plugin
 	@Inject private Client client;
 	@Inject private ClientThread clientThread;
 	@Inject private EventBus eventBus;
-	private IpcServer ipcServer;
 	private AntiBotDetector antiBotDetector;
 	private WoodcuttingBot woodcuttingBot;
 	private ObjectScanner objectScanner;
-	private WidgetPublisher widgetPublisher;
-	private PlayerPublisher playerPublisher;
 
 	@Override
 	protected void startUp() {
-		try {
-			this.ipcServer = new IpcServer(IPC_PORT);
-		} catch (IOException e) {
-			log.warn("Could not start IPC server on port {}: {}", IPC_PORT, e.getMessage());
-		}
-
-		objectScanner = new ObjectScanner(client, ipcServer, config);
+		objectScanner = new ObjectScanner(client, config);
 		eventBus.register(objectScanner);
 		antiBotDetector = new AntiBotDetector(client, this::onCheckDetected);
 		eventBus.register(antiBotDetector);
-		woodcuttingBot = new WoodcuttingBot(client, ipcServer, config, objectScanner);
+		woodcuttingBot = new WoodcuttingBot(client, config, objectScanner);
 		eventBus.register(woodcuttingBot);
-		widgetPublisher = new WidgetPublisher(client, ipcServer);
-		eventBus.register(widgetPublisher);
-		playerPublisher = new PlayerPublisher(client, ipcServer);
-		eventBus.register(playerPublisher);
-
-		widgetPublisher.start();
 
 		configManager.setConfiguration(CONFIG_GROUP, "botWC", "false");
 		configManager.setConfiguration(CONFIG_GROUP, "botCrabs", "false");
@@ -69,15 +50,25 @@ public class Apexea extends Plugin
 	@Override
 	protected void shutDown() {
 		woodcuttingBot.stop();
-		ipcServer.stop();
 		eventBus.unregister(woodcuttingBot);
 		eventBus.unregister(antiBotDetector);
 		eventBus.unregister(objectScanner);
-		eventBus.unregister(widgetPublisher);
-		eventBus.unregister(playerPublisher);
 
 		configManager.setConfiguration(CONFIG_GROUP, "botWC", "false");
 		configManager.setConfiguration(CONFIG_GROUP, "botCrabs", "false");
+	}
+
+
+	@Subscribe
+	public void onMenuOptionClicked(MenuOptionClicked event) {
+		log.info("MENU type={} id={} itemId={} p0={} p1={} opt='{}' target='{}'",
+				event.getMenuAction(),
+				event.getId(),
+				event.getItemId(),
+				event.getParam0(),
+				event.getParam1(),
+				event.getMenuOption(),
+				event.getMenuTarget());
 	}
 
 	@Subscribe
@@ -86,7 +77,7 @@ public class Apexea extends Plugin
 			return;
 		}
 
-		if ("botWC".equals(event.getKey())
+		if ("botWoodcutting".equals(event.getKey())
 				&& Boolean.parseBoolean(event.getNewValue())) {
 			woodcuttingBot.start();
 		}
@@ -94,8 +85,7 @@ public class Apexea extends Plugin
 
 	@Subscribe
 	public void onGameTick(GameTick event) {
-		widgetPublisher.publish();
-		playerPublisher.publish();
+
 	}
 
 	@Provides
