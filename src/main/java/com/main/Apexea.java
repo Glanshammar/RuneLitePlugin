@@ -3,6 +3,7 @@ package com.main;
 import javax.inject.Inject;
 
 import com.google.inject.Provides;
+import com.main.bots.ThievingBot;
 import com.main.utils.ObjectScanner;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
@@ -15,7 +16,7 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
-import com.main.skills.WoodcuttingBot;
+import com.main.bots.WoodcuttingBot;
 
 @Slf4j
 @PluginDescriptor(
@@ -23,7 +24,6 @@ import com.main.skills.WoodcuttingBot;
 )
 public class Apexea extends Plugin
 {
-	private static final int IPC_PORT = 8765;
 	private static final String CONFIG_GROUP = "Apexea";
 	@Inject private ApexeaConfig config;
 	@Inject private ConfigManager configManager;
@@ -32,6 +32,7 @@ public class Apexea extends Plugin
 	@Inject private EventBus eventBus;
 	private AntiBotDetector antiBotDetector;
 	private WoodcuttingBot woodcuttingBot;
+	private ThievingBot thievingBot;
 	private ObjectScanner objectScanner;
 
 	@Override
@@ -42,9 +43,8 @@ public class Apexea extends Plugin
 		eventBus.register(antiBotDetector);
 		woodcuttingBot = new WoodcuttingBot(client, config, objectScanner);
 		eventBus.register(woodcuttingBot);
-
-		configManager.setConfiguration(CONFIG_GROUP, "botWC", "false");
-		configManager.setConfiguration(CONFIG_GROUP, "botCrabs", "false");
+		thievingBot = new ThievingBot(client, config, objectScanner);
+		eventBus.register(thievingBot);
 	}
 
 	@Override
@@ -53,9 +53,10 @@ public class Apexea extends Plugin
 		eventBus.unregister(woodcuttingBot);
 		eventBus.unregister(antiBotDetector);
 		eventBus.unregister(objectScanner);
+		eventBus.unregister(thievingBot);
 
-		configManager.setConfiguration(CONFIG_GROUP, "botWC", "false");
-		configManager.setConfiguration(CONFIG_GROUP, "botCrabs", "false");
+		configManager.setConfiguration(CONFIG_GROUP, "botWoodcutting", "false");
+		configManager.setConfiguration(CONFIG_GROUP, "botThievingStalls", "false");
 	}
 
 

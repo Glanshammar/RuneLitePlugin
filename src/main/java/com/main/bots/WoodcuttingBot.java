@@ -1,4 +1,4 @@
-package com.main.skills;
+package com.main.bots;
 
 import com.main.ApexeaConfig;
 import com.main.utils.GameFunctions;
@@ -11,6 +11,7 @@ import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.eventbus.Subscribe;
 
+import java.awt.event.KeyEvent;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
@@ -23,8 +24,8 @@ public class WoodcuttingBot {
 
     private enum State { IDLE, CHOPPING, WALKING_TO_BANK, BANKING }
 
-    private static final Duration ACTION_COOLDOWN = Duration.ofMillis(700);
-    private static final Duration CHOP_START_TIMEOUT = Duration.ofSeconds(8);
+    private static final Duration ACTION_COOLDOWN = Duration.ofMillis(500);
+    private static final Duration CHOP_START_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration BANK_OPEN_TIMEOUT = Duration.ofSeconds(10);
 
     // --- priority trees, in order (worldX, worldY) ---
@@ -44,6 +45,7 @@ public class WoodcuttingBot {
             ObjectID.YEW_TREE, ObjectID.MAGIC_TREE, ObjectID.MAGIC_TREE_10834
     );
     private static final int BANK_CHEST = ObjectID.BANK_CHEST_14886;
+    private static final int MAGIC_TREE = ObjectID.MAGIC_TREE_10834;
 
     private static final Set<Integer> WC_ANIMATIONS = Set.of(
             AnimationID.WOODCUTTING_BRONZE, AnimationID.WOODCUTTING_IRON,
@@ -81,8 +83,7 @@ public class WoodcuttingBot {
         lastActionAt = Instant.EPOCH;
         choppingStarted = false;
         depositClicked = false;
-        objectScanner.addObjectIds(TREE_IDS);
-        objectScanner.addObjectIds(Set.of(BANK_CHEST));
+        objectScanner.addObjectIds(Set.of(BANK_CHEST, MAGIC_TREE));
     }
 
     public void stop() {
@@ -113,7 +114,7 @@ public class WoodcuttingBot {
             case IDLE:             tickIdle(player); break;
             case CHOPPING:         tickChopping(player); break;
             case WALKING_TO_BANK:  tickWalkingToBank(player); break;
-            case BANKING:          tickBanking(player); break;
+            case BANKING:          tickBanking(); break;
         }
     }
 
@@ -121,19 +122,16 @@ public class WoodcuttingBot {
     //  IDLE — pick and click a priority tree
     // ============================================================
     private void tickIdle(Player player) {
-        if (isInventoryFull()) {
-            log.info("Inventory full → heading to bank");
+        if (GameFunctions.isInventoryFull(client) || GameFunctions.hasInventoryAmount(client) >= 24) {
             setState(State.WALKING_TO_BANK);
             return;
         }
 
         ObjectScanner.Target tree = pickPriorityTree(player);
         if (tree == null) {
-            log.debug("No priority tree visible");
             return;
         }
 
-        log.info("Clicking tree at {}", tree.getWorldPosition());
         GameFunctions.clickObject(client, tree.getGameObject());
 
         choppingStarted = false;
@@ -145,8 +143,7 @@ public class WoodcuttingBot {
     //  CHOPPING — wait for the tree to fall or inventory to fill
     // ============================================================
     private void tickChopping(Player player) {
-        if (isInventoryFull()) {
-            log.info("Inventory full → heading to bank");
+        if (GameFunctions.isInventoryFull(client)) {
             setState(State.WALKING_TO_BANK);
             return;
         }
@@ -165,8 +162,6 @@ public class WoodcuttingBot {
             return;
         }
 
-        // was chopping, now not → tree is gone
-        log.info("Tree cut → looking for next");
         setState(State.IDLE);
     }
 
@@ -174,7 +169,7 @@ public class WoodcuttingBot {
     //  WALKING_TO_BANK — click the bank chest
     // ============================================================
     private void tickWalkingToBank(Player player) {
-        if (!isInventoryFull()) {
+        if (!GameFunctions.isInventoryFull(client)) {
             log.info("Inventory not full → resuming");
             setState(State.IDLE);
             return;
@@ -197,8 +192,8 @@ public class WoodcuttingBot {
     // ============================================================
     //  BANKING — deposit, then close and resume
     // ============================================================
-    private void tickBanking(Player player) {
-        if (!isBankOpen()) {
+    private void tickBanking() {
+        if (!GameFunctions.isBankOpen(client)) {
             if (Instant.now().isAfter(bankOpenDeadline)) {
                 log.warn("Bank never opened → retrying");
                 setState(State.WALKING_TO_BANK);
@@ -206,10 +201,11 @@ public class WoodcuttingBot {
             return;
         }
 
-        if (isInventoryFull()) {
+        if (GameFunctions.isInventoryFull(client)) {
             if (!depositClicked) {
                 log.info("Depositing inventory");
-                depositInventory();
+                GameFunctions.depositInventory(client);
+                lastActionAt = Instant.now();
                 depositClicked = true;
             }
             return;
@@ -217,7 +213,7 @@ public class WoodcuttingBot {
 
         // inventory empty — close bank and resume
         log.info("Inventory empty → closing bank");
-        GameFunctions.pressEscape(client);
+        GameFunctions.pressKey(client, KeyEvent.VK_ESCAPE);
         depositClicked = false;
         setState(State.IDLE);
     }
@@ -234,7 +230,7 @@ public class WoodcuttingBot {
     private ObjectScanner.Target pickPriorityTree(Player player) {
         int plane = player.getWorldLocation().getPlane();
         Map<WorldPoint, ObjectScanner.Target> byPos = new HashMap<>();
-        for (ObjectScanner.Target t : objectScanner.findGameObjects(TREE_IDS)) {
+        for (ObjectScanner.Target t : objectScanner.findGameObjects(Set.of(MAGIC_TREE))) {
             WorldPoint wp = t.getWorldPosition();
             if (wp != null && wp.getPlane() == plane && t.getGameObject() != null) {
                 byPos.put(wp, t);
@@ -271,15 +267,5 @@ public class WoodcuttingBot {
 
     public boolean isPlayerWoodcutting(Player player) {
         return player != null && WC_ANIMATIONS.contains(player.getAnimation());
-    }
-
-    public boolean isInventoryFull() {
-        ItemContainer inv = client.getItemContainer(InventoryID.INVENTORY);
-        return inv != null && inv.count() == inv.size();
-    }
-
-    private boolean isBankOpen() {
-        Widget w = client.getWidget(InterfaceID.Bankmain.ITEMS);
-        return w != null && !w.isHidden();
     }
 }

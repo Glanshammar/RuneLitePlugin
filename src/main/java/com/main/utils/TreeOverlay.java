@@ -1,6 +1,5 @@
-package com.main.skills;
+package com.main.utils;
 
-import com.main.utils.ObjectScanner;
 import net.runelite.api.Point;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
