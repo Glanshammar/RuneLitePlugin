@@ -7,6 +7,7 @@ import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
+import net.runelite.client.callback.ClientThread;
 
 import java.awt.*;
 import java.awt.event.KeyEvent;
@@ -170,17 +171,47 @@ public class GameFunctions {
         );
     }
 
-    public static void logoutNow(Client client) {
-        log.info("logoutNow called, state={}", client.getGameState());
+    public static boolean login(Client client, String username, String password) {
+        GameState state = client.getGameState();
+
+        if (state == GameState.LOGIN_SCREEN) {
+            client.setUsername(username);
+            client.setPassword(password);
+
+            // Click the Login button. The login interface is usually group 378.
+            // We locate the button by its action text to be resilient to ID changes.
+            Widget loginButton = client.getWidget(601, 19);
+            if (loginButton != null) {
+                clickWidget(client, loginButton);
+                return true;
+            }
+            log.warn("login: Login button not found");
+            return false;
+        }
+        return false;
+    }
+
+    public static void logout(Client client, ClientThread clientThread) {
         if (client.getGameState() != GameState.LOGGED_IN) return;
 
-        Widget logoutWidget = client.getWidget(InterfaceID.LOGOUT);
-        Widget logoutWidget2 = client.getWidget(InterfaceID.LOGOUT, 69);
-        if (logoutWidget == null) { log.warn("logout widget 182 is NULL"); return; }
-        if (logoutWidget2 == null) { log.warn("logout widget 182:69 is NULL"); return; }
+        Widget logoutButton1 = client.getWidget(548, 297);
+        Widget logoutButton2 = client.getWidget(182, 6);
 
-        clickWidget(client, logoutWidget);
-        clickWidget(client, logoutWidget2);
+        if(logoutButton1 == null)
+            log.error("Logout button 1 is NULL");
+        else
+            clickWidget(client, logoutButton1);
+
+        // Doesn't work at the moment, is always null
+        if(logoutButton2 == null)
+            log.error("Logout button 2 is NULL");
+        else
+            clientThread.invokeLater(() -> {
+                Widget confirm = client.getWidget(182, 6);
+                if (confirm != null && !confirm.isHidden()) {
+                    clickWidgetViaAction(client, confirm);
+                }
+            });
     }
 
     public static void pressKey(Client client, int keyCode) {
@@ -197,10 +228,20 @@ public class GameFunctions {
         ItemContainer inv = client.getItemContainer(InventoryID.INVENTORY);
         return inv != null && inv.count() == inv.size();
     }
-    public static int hasInventoryAmount(Client client){
+    public static int countInventoryItems(Client client){
         ItemContainer inv = client.getItemContainer(InventoryID.INVENTORY);
         assert inv != null;
         return inv.count();
+    }
+
+    public static int countItem(Client client, int itemId) {
+        ItemContainer inv = client.getItemContainer(InventoryID.INVENTORY);
+        if (inv == null) return 0;
+        int total = 0;
+        for (Item item : inv.getItems()) {
+            if (item != null && item.getId() == itemId) total += item.getQuantity();
+        }
+        return total;
     }
 
     public static boolean isBankOpen(Client client) {
@@ -215,5 +256,39 @@ public class GameFunctions {
             return;
         }
         GameFunctions.clickWidget(client, deposit);
+    }
+
+    public static void sendCommand(Client client, String command) {
+        if (command == null || !command.startsWith("::")) {
+            log.warn("sendCommand: command must start with '::'");
+            return;
+        }
+
+        // 1. Set the chatbox text variable to the full command string
+        client.setVarcStrValue(VarClientStr.CHATBOX_TYPED_TEXT, command);
+
+        // 2. Run the chatbox input script with a default chat type (0 = public chat)
+        client.runScript(ScriptID.CHAT_SEND, 0, command);
+
+        log.info("Sent command: {}", command);
+    }
+
+    private static boolean clickWidgetViaAction(Client client, Widget widget) {
+        if (widget == null || widget.isHidden()) return false;
+
+        String[] actions = widget.getActions();
+        if (actions != null) {
+            for (int i = 0; i < actions.length; i++) {
+                if (actions[i] != null && !actions[i].isEmpty()) {
+                    client.menuAction(widget.getId(), -1, MenuAction.CC_OP,
+                            i + 1, -1, actions[i], "");
+                    return true;
+                }
+            }
+        }
+
+        // No actions defined on the widget — fall back to bounds clicking as last resort
+        clickWidget(client, widget);
+        return false;
     }
 }
