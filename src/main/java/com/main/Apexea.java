@@ -3,12 +3,14 @@ package com.main;
 import javax.inject.Inject;
 
 import com.google.inject.Provides;
+import com.main.bots.AfkCombatBot;
 import com.main.bots.ThievingBot;
+import com.main.utils.GameFunctions;
 import com.main.utils.ObjectScanner;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.events.GameTick;
-import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.EventBus;
@@ -18,6 +20,8 @@ import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import com.main.bots.WoodcuttingBot;
 
+import java.util.List;
+
 @Slf4j
 @PluginDescriptor(
 	name = "Apexea"
@@ -25,11 +29,17 @@ import com.main.bots.WoodcuttingBot;
 public class Apexea extends Plugin
 {
 	private static final String CONFIG_GROUP = "Apexea";
+	private static final List<String> BOT_KEYS = List.of(
+			"botWoodcutting",
+			"botThieveStalls",
+			"botSandCrabs"
+	);
 	@Inject private ApexeaConfig config;
 	@Inject private ConfigManager configManager;
 	@Inject private Client client;
 	@Inject private ClientThread clientThread;
 	@Inject private EventBus eventBus;
+	private ObjectScanner objectScanner;
 	private AntiBotDetector antiBotDetector;
 	private WoodcuttingBot woodcuttingBot;
 	private ThievingBot thievingBot;
@@ -38,7 +48,7 @@ public class Apexea extends Plugin
 	protected void startUp() {
 		objectScanner = new ObjectScanner(client, config);
 		eventBus.register(objectScanner);
-		antiBotDetector = new AntiBotDetector(client, this::onCheckDetected);
+		antiBotDetector = new AntiBotDetector(client);
 		eventBus.register(antiBotDetector);
 		woodcuttingBot = new WoodcuttingBot(client, config, objectScanner);
 		eventBus.register(woodcuttingBot);
@@ -61,43 +71,62 @@ public class Apexea extends Plugin
 		configManager.setConfiguration(CONFIG_GROUP, "botThievingStalls", "false");
 	}
 
-
-	@Subscribe
-	public void onMenuOptionClicked(MenuOptionClicked event) {
-		log.info("MENU type={} id={} itemId={} p0={} p1={} opt='{}' target='{}'",
-				event.getMenuAction(),
-				event.getId(),
-				event.getItemId(),
-				event.getParam0(),
-				event.getParam1(),
-				event.getMenuOption(),
-				event.getMenuTarget());
-	}
-
 	@Subscribe
 	public void onConfigChanged(ConfigChanged event) {
 		if (!CONFIG_GROUP.equals(event.getGroup())) {
 			return;
+		}
+		if (!BOT_KEYS.contains(event.getKey())) {
+			return;
+		}
+		if (!Boolean.parseBoolean(event.getNewValue())) {
+			return;
+		}
+
+		for (String otherKey : BOT_KEYS) {
+			if (otherKey.equals(event.getKey())) {
+				continue;
+			}
+			if (Boolean.parseBoolean(configManager.getConfiguration(CONFIG_GROUP, otherKey))) {
+				// A different bot is already running -> revert this change
+				configManager.setConfiguration(CONFIG_GROUP, event.getKey(), false);
+				sendConflictMessage(event.getKey(), otherKey);
+				return;
+			}
 		}
 
 		if ("botWoodcutting".equals(event.getKey())
 				&& Boolean.parseBoolean(event.getNewValue())) {
 			woodcuttingBot.start();
 		}
+		if ("test".equals(event.getKey())
+				&& Boolean.parseBoolean(event.getNewValue())) {
+			configManager.setConfiguration(CONFIG_GROUP, "test", false);
+		}
+	}
+
+	private void sendConflictMessage(String attempted, String alreadyRunning) {
+		String msg = String.format(
+				"Cannot enable '%s' while '%s' is already running. " +
+						"Disable '%s' first.",
+				attempted, alreadyRunning, alreadyRunning
+		);
+
+		client.addChatMessage(ChatMessageType.GAMEMESSAGE,
+				"", "<col=ff0000>" + msg + "</col>", null);
 	}
 
 	@Subscribe
 	public void onGameTick(GameTick event) {
-
+		if (config.testThing()) {
+			GameFunctions.sendCommand(client, "::home");
+			configManager.setConfiguration(CONFIG_GROUP, "test", false);
+		}
 	}
 
 	@Provides
 	ApexeaConfig provideConfig(ConfigManager configManager)
 	{
 		return configManager.getConfig(ApexeaConfig.class);
-	}
-
-	private void onCheckDetected() {
-		log.warn("Anti-bot check triggered");
 	}
 }
