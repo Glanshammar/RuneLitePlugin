@@ -38,4 +38,28 @@ public interface ApexeaConfig extends Config
     {
         return false;
     }
+
+    @ConfigItem(
+            keyName = "botAfkCombat",
+            name = "AFK Combat",
+            description = "Runs the AFK combat bot",
+            section = botSection,
+            position = 2
+    )
+    default boolean botAfkCombat()
+    {
+        return false;
+    }
+
+    @ConfigItem(
+            keyName = "test",
+            name = "Test Thing",
+            description = "Test something",
+            section = botSection,
+            position = 3
+    )
+    default boolean testThing()
+    {
+        return false;
+    }
 }

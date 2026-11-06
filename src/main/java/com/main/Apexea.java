@@ -33,8 +33,7 @@ public class Apexea extends Plugin
 	private AntiBotDetector antiBotDetector;
 	private WoodcuttingBot woodcuttingBot;
 	private ThievingBot thievingBot;
-	private ObjectScanner objectScanner;
-
+	private AfkCombatBot afkCombatBot;
 	@Override
 	protected void startUp() {
 		objectScanner = new ObjectScanner(client, config);
@@ -45,6 +44,8 @@ public class Apexea extends Plugin
 		eventBus.register(woodcuttingBot);
 		thievingBot = new ThievingBot(client, config, objectScanner);
 		eventBus.register(thievingBot);
+		afkCombatBot = new AfkCombatBot(client, config, clientThread);
+		eventBus.register(afkCombatBot);
 	}
 
 	@Override
@@ -54,6 +55,7 @@ public class Apexea extends Plugin
 		eventBus.unregister(antiBotDetector);
 		eventBus.unregister(objectScanner);
 		eventBus.unregister(thievingBot);
+		eventBus.unregister(afkCombatBot);
 
 		configManager.setConfiguration(CONFIG_GROUP, "botWoodcutting", "false");
 		configManager.setConfiguration(CONFIG_GROUP, "botThievingStalls", "false");
