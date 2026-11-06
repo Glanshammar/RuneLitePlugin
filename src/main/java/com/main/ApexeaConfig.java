@@ -9,6 +9,19 @@ import net.runelite.client.config.ConfigSection;
 public interface ApexeaConfig extends Config
 {
     @ConfigSection(
+            name = "Credentials",
+            description = "",
+            position = 1
+    )
+    String userSection = "User";
+
+    @ConfigItem(keyName = "username", name = "Username", description = "Alora username", section = userSection, position = 0)
+    default String username() { return ""; }
+
+    @ConfigItem(keyName = "password", name = "Password", description = "Alora password", secret = true, section = userSection, position = 1)
+    default String password() { return ""; }
+
+    @ConfigSection(
             name = "Bots",
             description = "",
             position = 1
