@@ -34,6 +34,10 @@ public class GameFunctions {
                 System.currentTimeMillis(), 0, x, y, 1, false, leftRight));
     }
 
+    public static void menuAction(Client client, int objectId, String option){
+        client.menuAction(-1, -1, MenuAction.GAME_OBJECT_FIRST_OPTION, objectId, -1, option, "");
+    }
+
     public static boolean selectMenuOption(Client client, String optionText) {
         MenuEntry[] entries = client.getMenuEntries();
         if (entries == null || entries.length == 0) {
@@ -45,10 +49,6 @@ public class GameFunctions {
         int menuY = client.getMenuY();
         log.info("menu at ({},{}) with {} entries", menuX, menuY, entries.length);
 
-        // Locate the target and its row from the top.
-        // entries[length-1] is the TOP visible entry; entries[0] is the BOTTOM.
-        // If this proves wrong on your client build, the "menu order" log below
-        // will show it — just flip the formula.
         for (int i = 0; i < entries.length; i++) {
             MenuEntry e = entries[i];
             log.info("  [{}] top-row={} option='{}' target='{}'",
@@ -191,30 +191,18 @@ public class GameFunctions {
         return false;
     }
 
-    public static void logout(Client client, ClientThread clientThread) {
+    public static void logout(Client client) {
         if (client.getGameState() != GameState.LOGGED_IN) return;
 
         Widget logoutButton1 = client.getWidget(548, 297);
-        Widget logoutButton2 = client.getWidget(182, 6);
 
         if(logoutButton1 == null)
             log.error("Logout button 1 is NULL");
         else
             clickWidget(client, logoutButton1);
-
-        // Doesn't work at the moment, is always null
-        if(logoutButton2 == null)
-            log.error("Logout button 2 is NULL");
-        else
-            clientThread.invokeLater(() -> {
-                Widget confirm = client.getWidget(182, 6);
-                if (confirm != null && !confirm.isHidden()) {
-                    clickWidgetViaAction(client, confirm);
-                }
-            });
     }
 
-    public static void pressKey(Client client, int keyCode) {
+    public static void keyPress(Client client, int keyCode) {
         Canvas canvas = client.getCanvas();
         if (canvas == null) return;
         long now = System.currentTimeMillis();
@@ -271,24 +259,5 @@ public class GameFunctions {
         client.runScript(ScriptID.CHAT_SEND, 0, command);
 
         log.info("Sent command: {}", command);
-    }
-
-    private static boolean clickWidgetViaAction(Client client, Widget widget) {
-        if (widget == null || widget.isHidden()) return false;
-
-        String[] actions = widget.getActions();
-        if (actions != null) {
-            for (int i = 0; i < actions.length; i++) {
-                if (actions[i] != null && !actions[i].isEmpty()) {
-                    client.menuAction(widget.getId(), -1, MenuAction.CC_OP,
-                            i + 1, -1, actions[i], "");
-                    return true;
-                }
-            }
-        }
-
-        // No actions defined on the widget — fall back to bounds clicking as last resort
-        clickWidget(client, widget);
-        return false;
     }
 }
