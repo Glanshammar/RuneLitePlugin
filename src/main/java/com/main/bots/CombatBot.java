@@ -16,31 +16,27 @@ import java.time.Duration;
 import java.time.Instant;
 
 @Slf4j
-public class AfkCombatBot {
-    private static final Duration LOGOUT_RETRY_COOLDOWN = Duration.ofSeconds(2);
+public class CombatBot {
 
     private final Client client;
-    private final ClientThread clientThread;
     private final ApexeaConfig config;
 
     private Instant lastCombatAt = Instant.EPOCH;
-    private Instant lastLogoutAttemptAt = Instant.EPOCH;
     private boolean running = false;
+    private boolean loggingIn = false;
 
-    public AfkCombatBot(Client client, ApexeaConfig config, ClientThread clientThread) {
+    public CombatBot(Client client, ApexeaConfig config, ClientThread clientThread) {
         this.client = client;
         this.config = config;
-        this.clientThread = clientThread;
     }
 
     public void start() {
-        log.info("AFK combat bot starting");
+        log.info("Combat bot starting");
         lastCombatAt = Instant.now();
-        lastLogoutAttemptAt = Instant.EPOCH;
     }
 
     public void stop() {
-        log.info("AFK combat bot stopping");
+        log.info("Combat bot stopping");
     }
 
     // ============================================================
@@ -57,7 +53,11 @@ public class AfkCombatBot {
 
     @Subscribe
     public void onGameTick(GameTick event) {
-        if (client.getGameState() == GameState.LOGIN_SCREEN) GameFunctions.login(client, config.username(), config.password());
+        if (this.loggingIn) return;
+        if (client.getGameState() == GameState.LOGIN_SCREEN){
+            this.loggingIn = true;
+            GameFunctions.login(client, config.username(), config.password());
+        }
 
         boolean shouldRun = config.botAfkCombat();
         if (shouldRun != running) {
@@ -68,6 +68,7 @@ public class AfkCombatBot {
 
         Player player = client.getLocalPlayer();
         if (player == null) return;
+        loggingIn = false;
 
         if (player.getInteracting() != null) {
             lastCombatAt = Instant.now();
@@ -84,9 +85,5 @@ public class AfkCombatBot {
         // --- out-of-combat check ---
         Duration outOfCombat = Duration.between(lastCombatAt, Instant.now());
         if (outOfCombat.getSeconds() < 13) return;
-        if (Instant.now().isBefore(lastLogoutAttemptAt.plus(LOGOUT_RETRY_COOLDOWN))) return;
-
-        lastLogoutAttemptAt = Instant.now();
-        GameFunctions.logout(client, clientThread);
     }
 }
