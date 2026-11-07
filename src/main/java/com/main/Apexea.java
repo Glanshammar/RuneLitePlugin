@@ -3,9 +3,8 @@ package com.main;
 import javax.inject.Inject;
 
 import com.google.inject.Provides;
-import com.main.bots.AfkCombatBot;
+import com.main.bots.CombatBot;
 import com.main.bots.ThievingBot;
-import com.main.utils.GameFunctions;
 import com.main.utils.ObjectScanner;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
@@ -32,7 +31,7 @@ public class Apexea extends Plugin
 	private static final List<String> BOT_KEYS = List.of(
 			"botWoodcutting",
 			"botThieveStalls",
-			"botSandCrabs"
+			"botCombat"
 	);
 	@Inject private ApexeaConfig config;
 	@Inject private ConfigManager configManager;
@@ -43,7 +42,7 @@ public class Apexea extends Plugin
 	private AntiBotDetector antiBotDetector;
 	private WoodcuttingBot woodcuttingBot;
 	private ThievingBot thievingBot;
-	private AfkCombatBot afkCombatBot;
+	private CombatBot combatBot;
 	@Override
 	protected void startUp() {
 		objectScanner = new ObjectScanner(client, config);
@@ -54,8 +53,8 @@ public class Apexea extends Plugin
 		eventBus.register(woodcuttingBot);
 		thievingBot = new ThievingBot(client, config, objectScanner);
 		eventBus.register(thievingBot);
-		afkCombatBot = new AfkCombatBot(client, config, clientThread);
-		eventBus.register(afkCombatBot);
+		combatBot = new CombatBot(client, config, clientThread);
+		eventBus.register(combatBot);
 	}
 
 	@Override
@@ -65,10 +64,10 @@ public class Apexea extends Plugin
 		eventBus.unregister(antiBotDetector);
 		eventBus.unregister(objectScanner);
 		eventBus.unregister(thievingBot);
-		eventBus.unregister(afkCombatBot);
+		eventBus.unregister(combatBot);
 
 		configManager.setConfiguration(CONFIG_GROUP, "botWoodcutting", "false");
-		configManager.setConfiguration(CONFIG_GROUP, "botThievingStalls", "false");
+		configManager.setConfiguration(CONFIG_GROUP, "botThieveStalls", "false");
 	}
 
 	@Subscribe
@@ -99,9 +98,9 @@ public class Apexea extends Plugin
 				&& Boolean.parseBoolean(event.getNewValue())) {
 			woodcuttingBot.start();
 		}
-		if ("test".equals(event.getKey())
+		if ("botThieveStalls".equals(event.getKey())
 				&& Boolean.parseBoolean(event.getNewValue())) {
-			configManager.setConfiguration(CONFIG_GROUP, "test", false);
+			thievingBot.start();
 		}
 	}
 
@@ -118,10 +117,7 @@ public class Apexea extends Plugin
 
 	@Subscribe
 	public void onGameTick(GameTick event) {
-		if (config.testThing()) {
-			GameFunctions.sendCommand(client, "::home");
-			configManager.setConfiguration(CONFIG_GROUP, "test", false);
-		}
+
 	}
 
 	@Provides

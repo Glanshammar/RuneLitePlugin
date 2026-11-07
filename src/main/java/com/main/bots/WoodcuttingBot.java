@@ -213,7 +213,7 @@ public class WoodcuttingBot {
         }
 
         log.info("Inventory empty. closing bank.");
-        GameFunctions.pressKey(client, KeyEvent.VK_ESCAPE);
+        GameFunctions.keyPress(client, KeyEvent.VK_ESCAPE);
         depositClicked = false;
         setState(State.IDLE);
     }

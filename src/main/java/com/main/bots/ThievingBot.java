@@ -1,5 +1,6 @@
 package com.main.bots;
 
+import com.main.AntiBotDetector;
 import com.main.ApexeaConfig;
 import com.main.utils.GameFunctions;
 import com.main.utils.ObjectScanner;
@@ -12,6 +13,7 @@ import net.runelite.api.widgets.Widget;
 import net.runelite.client.eventbus.Subscribe;
 
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseEvent;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -22,18 +24,18 @@ public class ThievingBot {
     private enum State { IDLE, STEALING, SELLING }
 
     private static final Duration ACTION_COOLDOWN = Duration.ofMillis(300);
-    private static final Duration STEAL_TIMEOUT = Duration.ofMillis(300);
+    private static final Duration STEAL_TIMEOUT = Duration.ofMillis(50);
     private static final Duration SHOP_OPEN_TIMEOUT = Duration.ofSeconds(15);
 
-    private static final int STALL = 4878;
-    private static final int SELLER_NPC = 3533;
-    private static final int SELL_ITEM = 1331;   // adamant scimitar
+    private static final int STALL = 4878; // Scimitar Stall
+    private static final int SELLER_NPC = 3533; // Ali
+    private static final int SELL_ITEM = 1331; // Adamant Scimitar
 
     private final Client client;
     private final ApexeaConfig config;
     private final ObjectScanner objectScanner;
 
-    private State state = State.IDLE;
+    private State state = State.STEALING;
     private Instant lastActionAt = Instant.EPOCH;
     private boolean running = false;
 
@@ -52,7 +54,7 @@ public class ThievingBot {
 
     public void start() {
         log.info("Thieving bot starting");
-        state = State.IDLE;
+        state = State.STEALING;
         lastActionAt = Instant.EPOCH;
         lastStolenCount = 0;
         objectScanner.addObjectIds(Set.of(STALL));
@@ -66,6 +68,7 @@ public class ThievingBot {
     @Subscribe
     public void onGameTick(GameTick event) {
         if (client.getGameState() != GameState.LOGGED_IN) return;
+        // if (AntiBotDetector.isDetected()) return;
 
         boolean shouldRun = config.botThieveStalls();
         if (shouldRun != running) {
@@ -77,21 +80,21 @@ public class ThievingBot {
         Player player = client.getLocalPlayer();
         if (player == null) return;
 
-        switch (state) {
-            case IDLE:     tickIdle(player); break;
-            case STEALING: tickStealing(player); break;   // no cooldown — only observing
-            case SELLING:  tickSelling(player); break;
+        if(state == State.STEALING){
+            tickStealing(player);
+        } else if (state == State.SELLING) {
+            tickSelling(player);
         }
     }
 
     // ============================================================
     //  IDLE — click stall, or transition to SELLING when full
     // ============================================================
-    private void tickIdle(Player player) {
+    private void tickStealing(Player player) {
         if (Instant.now().isBefore(lastActionAt.plus(ACTION_COOLDOWN))) return;
 
-        if (isInventoryFull()) {
-            if (countItem(SELL_ITEM) == 0) {
+        if (GameFunctions.isInventoryFull(client)) {
+            if (GameFunctions.countItem(client, SELL_ITEM) == 0) {
                 log.error("Inventory full but no adamant scimitars — stopping");
                 stop();
                 running = false;
@@ -112,25 +115,9 @@ public class ThievingBot {
         log.info("Stealing from stall at {}", stall.getWorldPosition());
         GameFunctions.clickObject(client, stall.getGameObject());
 
-        lastStolenCount = countItem(SELL_ITEM);
+        lastStolenCount = GameFunctions.countItem(client, SELL_ITEM);
         stealStartDeadline = Instant.now().plus(STEAL_TIMEOUT);
         setState(State.STEALING);
-    }
-
-    // ============================================================
-    //  STEALING — wait for inventory count to increase
-    // ============================================================
-    private void tickStealing(Player player) {
-        int current = countItem(SELL_ITEM);
-        if (current > lastStolenCount) {
-            log.debug("Stole item ({} → {})", lastStolenCount, current);
-            setState(State.IDLE);
-            return;
-        }
-        if (Instant.now().isAfter(stealStartDeadline)) {
-            log.warn("Steal timed out — retrying");
-            setState(State.IDLE);
-        }
     }
 
     // ============================================================
@@ -138,7 +125,6 @@ public class ThievingBot {
     // ============================================================
     private void tickSelling(Player player) {
         if (!isShopOpen()) {
-            // First tick of SELLING: click the NPC.
             if (shopOpenDeadline.equals(Instant.EPOCH)) {
                 NPC npc = findNpc(SELLER_NPC, player);
                 if (npc == null) {
@@ -153,20 +139,16 @@ public class ThievingBot {
             }
             if (Instant.now().isAfter(shopOpenDeadline)) {
                 log.warn("Shop never opened — retrying");
-                setState(State.IDLE);
             }
             return;
         }
 
-        // Shop is open — sell one scimitar per tick.
-        if (Instant.now().isBefore(lastActionAt.plus(ACTION_COOLDOWN))) return;
-
         int slot = findSlotWithItem(SELL_ITEM);
         if (slot < 0) {
             log.info("All scimitars sold — closing shop");
-            GameFunctions.pressKey(client, KeyEvent.VK_ESCAPE);
+            GameFunctions.keyPress(client, KeyEvent.VK_ESCAPE);
             lastActionAt = Instant.now();
-            setState(State.IDLE);
+            setState(State.STEALING);
             return;
         }
 
@@ -211,16 +193,6 @@ public class ThievingBot {
         return best;
     }
 
-    private int countItem(int itemId) {
-        ItemContainer inv = client.getItemContainer(InventoryID.INVENTORY);
-        if (inv == null) return 0;
-        int total = 0;
-        for (Item item : inv.getItems()) {
-            if (item != null && item.getId() == itemId) total += item.getQuantity();
-        }
-        return total;
-    }
-
     private int findSlotWithItem(int itemId) {
         ItemContainer inv = client.getItemContainer(InventoryID.INVENTORY);
         if (inv == null) return -1;
@@ -241,13 +213,6 @@ public class ThievingBot {
         GameFunctions.clickWidget(client, slotWidget);
     }
 
-    private boolean isInventoryFull() {
-        ItemContainer inv = client.getItemContainer(InventoryID.INVENTORY);
-        return inv != null && inv.count() == inv.size();
-    }
-
-    /** Shop is open iff inventory items have a "Sell" action.
-     *  This is more robust than checking a specific shop widget ID. */
     private boolean isShopOpen() {
         Widget inv = client.getWidget(InterfaceID.Inventory.ITEMS);
         if (inv == null || inv.isHidden()) return false;

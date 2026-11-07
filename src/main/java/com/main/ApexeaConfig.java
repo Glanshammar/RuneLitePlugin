@@ -11,7 +11,7 @@ public interface ApexeaConfig extends Config
     @ConfigSection(
             name = "Credentials",
             description = "",
-            position = 1
+            position = 0
     )
     String userSection = "User";
 
@@ -52,26 +52,21 @@ public interface ApexeaConfig extends Config
         return false;
     }
 
-    @ConfigItem(
-            keyName = "botAfkCombat",
-            name = "AFK Combat",
-            description = "Runs the AFK combat bot",
-            section = botSection,
-            position = 2
+    @ConfigSection(
+            name = "Bots",
+            description = "",
+            position = 1
     )
-    default boolean botAfkCombat()
-    {
-        return false;
-    }
+    String sectionCombat = "Bots";
 
     @ConfigItem(
-            keyName = "test",
-            name = "Test Thing",
-            description = "Test something",
-            section = botSection,
-            position = 3
+            keyName = "botCombat",
+            name = "Combat bot",
+            description = "Runs the combat bot",
+            section = sectionCombat,
+            position = 2
     )
-    default boolean testThing()
+    default boolean botCombat()
     {
         return false;
     }
