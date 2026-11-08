@@ -7,7 +7,15 @@ import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
-import net.runelite.client.callback.ClientThread;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import java.awt.*;
 import java.awt.event.KeyEvent;
@@ -16,6 +24,16 @@ import java.awt.event.MouseEvent;
 @Slf4j
 public class GameFunctions {
     private GameFunctions(){}
+
+    private static Instant waitingSince = null;
+
+    public static void startWaitTimer(){
+        waitingSince = Instant.now();
+    }
+
+    public static boolean ifTimeWaited(Duration duration){
+        return waitingSince != null && Duration.between(waitingSince, Instant.now()).compareTo(duration) > 0;
+    }
 
     public static void click(Client client, int leftRight, int x, int y) {
         Canvas canvas = client.getCanvas();
@@ -212,6 +230,27 @@ public class GameFunctions {
                 now, 0, keyCode, KeyEvent.CHAR_UNDEFINED));
     }
 
+    public static void typeText(Client client, String text){
+        Canvas canvas = client.getCanvas();
+        if (canvas == null) return;
+
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        long delay = 0;
+
+        for (char c : text.toCharArray()) {
+            int keyCode = charToKeyCode(c);
+            if (keyCode == KeyEvent.VK_UNDEFINED) {
+                delay += 50;
+                continue;
+            }
+            scheduler.schedule(() -> keyPress(client, keyCode), delay, TimeUnit.MILLISECONDS);
+            delay += 50;
+        }
+
+        // Shut down after all keys are dispatched
+        scheduler.schedule(() -> scheduler.shutdown(), delay + 100, TimeUnit.MILLISECONDS);
+    }
+
     public static boolean isInventoryFull(Client client) {
         ItemContainer inv = client.getItemContainer(InventoryID.INVENTORY);
         return inv != null && inv.count() == inv.size();
@@ -259,5 +298,31 @@ public class GameFunctions {
         client.runScript(ScriptID.CHAT_SEND, 0, command);
 
         log.info("Sent command: {}", command);
+    }
+
+    private static final Map<Character, Integer> SPECIAL_KEYS;
+    static {
+        Map<Character, Integer> m = new HashMap<>();
+        m.put(' ', KeyEvent.VK_SPACE);
+        m.put('\n', KeyEvent.VK_ENTER);
+        m.put('-', KeyEvent.VK_MINUS);
+        m.put('=', KeyEvent.VK_EQUALS);
+        m.put('[', KeyEvent.VK_OPEN_BRACKET);
+        m.put(']', KeyEvent.VK_CLOSE_BRACKET);
+        m.put('\\', KeyEvent.VK_BACK_SLASH);
+        m.put(';', KeyEvent.VK_SEMICOLON);
+        m.put('\'', KeyEvent.VK_QUOTE);
+        m.put('/', KeyEvent.VK_SLASH);
+        m.put(',', KeyEvent.VK_COMMA);
+        m.put('.', KeyEvent.VK_PERIOD);
+        m.put('`', KeyEvent.VK_BACK_QUOTE);
+        SPECIAL_KEYS = Collections.unmodifiableMap(m);
+    }
+
+    private static int charToKeyCode(char c) {
+        if (c >= 'a' && c <= 'z') return KeyEvent.VK_A + (c - 'a');
+        if (c >= 'A' && c <= 'Z') return KeyEvent.VK_A + (c - 'A');
+        if (c >= '0' && c <= '9') return KeyEvent.VK_0 + (c - '0');
+        return SPECIAL_KEYS.getOrDefault(c, KeyEvent.VK_UNDEFINED);
     }
 }
