@@ -9,30 +9,36 @@ import net.runelite.client.config.ConfigSection;
 public interface ApexeaConfig extends Config
 {
     @ConfigSection(
-            name = "Credentials",
-            description = "",
+            name = "Functions",
+            description = "Activate functions in the plugin.",
             position = 0
     )
-    String userSection = "User";
+    String sectionFunctions = "Functions";
 
-    @ConfigItem(keyName = "username", name = "Username", description = "Alora username", section = userSection, position = 0)
-    default String username() { return ""; }
-
-    @ConfigItem(keyName = "password", name = "Password", description = "Alora password", secret = true, section = userSection, position = 1)
-    default String password() { return ""; }
+    @ConfigItem(
+            keyName = "funcWidgets",
+            name = "Widgets",
+            description = "Runs the widgets function",
+            section = sectionFunctions,
+            position = 0
+    )
+    default boolean funcWidgets()
+    {
+        return false;
+    }
 
     @ConfigSection(
             name = "Bots",
             description = "",
             position = 1
     )
-    String botSection = "Bots";
+    String sectionBots = "Bots";
 
     @ConfigItem(
             keyName = "botWoodcutting",
             name = "Woodcutting",
             description = "Runs the Woodcutting bot",
-            section = botSection,
+            section = sectionBots,
             position = 0
     )
     default boolean botWoodcutting()
@@ -44,7 +50,7 @@ public interface ApexeaConfig extends Config
             keyName = "botThieveStalls",
             name = "Thieving Stalls",
             description = "Runs the thieving stalls bot",
-            section = botSection,
+            section = sectionBots,
             position = 1
     )
     default boolean botThieveStalls()
@@ -53,21 +59,33 @@ public interface ApexeaConfig extends Config
     }
 
     @ConfigSection(
-            name = "Bots",
+            name = "Combat",
             description = "",
-            position = 1
+            position = 2
     )
-    String sectionCombat = "Bots";
+    String sectionCombat = "Combat";
 
     @ConfigItem(
             keyName = "botCombat",
             name = "Combat bot",
             description = "Runs the combat bot",
             section = sectionCombat,
-            position = 2
+            position = 0
     )
     default boolean botCombat()
-    {
-        return false;
+    { return false; }
+
+    @ConfigItem(
+            keyName = "script",
+            name = "Script",
+            description = "Bot script. Pick one before enabling the combat bot.",
+            section = sectionCombat,
+            position = 1)
+    default CombatScript botCombatScript() { return CombatScript.NEAREST; }
+
+    enum CombatScript{
+        NEAREST,
+        GEMSTONE_CRAB,
+        SLAYER,
     }
 }
