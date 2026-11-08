@@ -53,7 +53,7 @@ public class Apexea extends Plugin
 		eventBus.register(woodcuttingBot);
 		thievingBot = new ThievingBot(client, config, objectScanner);
 		eventBus.register(thievingBot);
-		combatBot = new CombatBot(client, config, clientThread);
+		combatBot = new CombatBot(client, config, objectScanner);
 		eventBus.register(combatBot);
 	}
 
