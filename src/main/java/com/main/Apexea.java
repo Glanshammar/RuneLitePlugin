@@ -19,6 +19,7 @@ import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import com.main.bots.WoodcuttingBot;
+import net.runelite.api.events.ChatMessage;
 
 import java.util.List;
 
@@ -123,6 +124,14 @@ public class Apexea extends Plugin
 
 		client.addChatMessage(ChatMessageType.GAMEMESSAGE,
 				"", "<col=ff0000>" + msg + "</col>", null);
+	}
+
+	@Subscribe
+	public void onGameMessage(ChatMessage event) {
+		if (event.getMessage().contains("It will continue granting everyone 30% bonus experience for 2 hours.") || event.getMessage().contains("30% Bonus XP is active from the Well of Goodwill")) {
+			AntiBotDetector.isWellActive = true;
+			log.info("Anti-Bot well timer updated.");
+		}
 	}
 
 	@Subscribe
