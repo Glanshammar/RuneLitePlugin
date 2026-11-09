@@ -4,6 +4,7 @@ import javax.inject.Inject;
 
 import com.google.inject.Provides;
 import com.main.bots.CombatBot;
+import com.main.bots.FiremakingBot;
 import com.main.bots.ThievingBot;
 import com.main.utils.GameFunctions;
 import com.main.utils.ObjectScanner;
@@ -45,6 +46,7 @@ public class Apexea extends Plugin
 	private WoodcuttingBot woodcuttingBot;
 	private ThievingBot thievingBot;
 	private CombatBot combatBot;
+	private FiremakingBot firemakingBot;
 	@Override
 	protected void startUp() {
 		objectScanner = new ObjectScanner(client, config);
@@ -57,12 +59,15 @@ public class Apexea extends Plugin
 		eventBus.register(thievingBot);
 		combatBot = new CombatBot(client, config, objectScanner);
 		eventBus.register(combatBot);
+		firemakingBot = new FiremakingBot(client, config, objectScanner);
+		eventBus.register(firemakingBot);
 
 		GameFunctions.init(client);
 
 		configManager.setConfiguration(CONFIG_GROUP, "botWoodcutting", "false");
 		configManager.setConfiguration(CONFIG_GROUP, "botThieveStalls", "false");
 		configManager.setConfiguration(CONFIG_GROUP, "botCombat", "false");
+		configManager.setConfiguration(CONFIG_GROUP, "botFiremaking", "false");
 	}
 
 	@Override
@@ -73,12 +78,14 @@ public class Apexea extends Plugin
 		eventBus.unregister(objectScanner);
 		eventBus.unregister(thievingBot);
 		eventBus.unregister(combatBot);
+		eventBus.unregister(firemakingBot);
 
 		GameFunctions.destroy();
 
 		configManager.setConfiguration(CONFIG_GROUP, "botWoodcutting", "false");
 		configManager.setConfiguration(CONFIG_GROUP, "botThieveStalls", "false");
 		configManager.setConfiguration(CONFIG_GROUP, "botCombat", "false");
+		configManager.setConfiguration(CONFIG_GROUP, "botFiremaking", "false");
 	}
 
 	@Subscribe
@@ -113,6 +120,10 @@ public class Apexea extends Plugin
 				&& Boolean.parseBoolean(event.getNewValue())) {
 			thievingBot.start();
 		}
+		if ("botFiremaking".equals(event.getKey())
+				&& Boolean.parseBoolean(event.getNewValue())) {
+			thievingBot.start();
+		}
 	}
 
 	private void sendConflictMessage(String attempted, String alreadyRunning) {
@@ -127,16 +138,11 @@ public class Apexea extends Plugin
 	}
 
 	@Subscribe
-	public void onGameMessage(ChatMessage event) {
+	public void onChatMessage(ChatMessage event) {
 		if (event.getMessage().contains("It will continue granting everyone 30% bonus experience for 2 hours.") || event.getMessage().contains("30% Bonus XP is active from the Well of Goodwill")) {
 			AntiBotDetector.isWellActive = true;
 			log.info("Anti-Bot well timer updated.");
 		}
-	}
-
-	@Subscribe
-	public void onGameTick(GameTick event) {
-
 	}
 
 	@Provides
