@@ -13,7 +13,6 @@ import net.runelite.api.widgets.Widget;
 import net.runelite.client.eventbus.Subscribe;
 
 import java.awt.event.KeyEvent;
-import java.awt.event.MouseEvent;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -22,9 +21,6 @@ import java.util.Set;
 @Slf4j
 public class ThievingBot {
     private enum State { IDLE, STEALING, SELLING }
-
-    private static final Duration ACTION_COOLDOWN = Duration.ofMillis(300);
-    private static final Duration STEAL_TIMEOUT = Duration.ofMillis(50);
     private static final Duration SHOP_OPEN_TIMEOUT = Duration.ofSeconds(15);
 
     private static final int STALL = 4878; // Scimitar Stall
@@ -68,7 +64,7 @@ public class ThievingBot {
     @Subscribe
     public void onGameTick(GameTick event) {
         if (client.getGameState() != GameState.LOGGED_IN) return;
-        // if (AntiBotDetector.isDetected()) return;
+        if (AntiBotDetector.isDetected()) return;
 
         boolean shouldRun = config.botThieveStalls();
         if (shouldRun != running) {
@@ -91,16 +87,7 @@ public class ThievingBot {
     //  IDLE — click stall, or transition to SELLING when full
     // ============================================================
     private void tickStealing(Player player) {
-        if (Instant.now().isBefore(lastActionAt.plus(ACTION_COOLDOWN))) return;
-
-        if (GameFunctions.isInventoryFull(client)) {
-            if (GameFunctions.countItem(client, SELL_ITEM) == 0) {
-                log.error("Inventory full but no adamant scimitars — stopping");
-                stop();
-                running = false;
-                return;
-            }
-
+        if (GameFunctions.isInventoryFull()) {
             setState(State.SELLING);
             shopOpenDeadline = Instant.EPOCH;
             return;
@@ -113,10 +100,7 @@ public class ThievingBot {
         }
 
         log.info("Stealing from stall at {}", stall.getWorldPosition());
-        GameFunctions.clickObject(client, stall.getGameObject());
-
-        lastStolenCount = GameFunctions.countItem(client, SELL_ITEM);
-        stealStartDeadline = Instant.now().plus(STEAL_TIMEOUT);
+        GameFunctions.clickObject(stall.getGameObject());
         setState(State.STEALING);
     }
 
@@ -132,7 +116,7 @@ public class ThievingBot {
                     return;
                 }
                 log.info("Clicking seller NPC");
-                GameFunctions.clickNpc(client, npc);
+                GameFunctions.clickNpc(npc);
                 shopOpenDeadline = Instant.now().plus(SHOP_OPEN_TIMEOUT);
                 lastActionAt = Instant.now();
                 return;
@@ -143,17 +127,17 @@ public class ThievingBot {
             return;
         }
 
-        int slot = findSlotWithItem(SELL_ITEM);
+        int slot = GameFunctions.findSlotWithItem(SELL_ITEM);
         if (slot < 0) {
             log.info("All scimitars sold — closing shop");
-            GameFunctions.keyPress(client, KeyEvent.VK_ESCAPE);
+            GameFunctions.keyPress(KeyEvent.VK_ESCAPE);
             lastActionAt = Instant.now();
             setState(State.STEALING);
             return;
         }
 
         log.debug("Selling scimitar in slot {}", slot);
-        clickInventorySlot(slot);
+        GameFunctions.clickInventorySlot(slot);
         lastActionAt = Instant.now();
     }
 
@@ -191,26 +175,6 @@ public class ThievingBot {
             if (d < bestDist) { bestDist = d; best = npc; }
         }
         return best;
-    }
-
-    private int findSlotWithItem(int itemId) {
-        ItemContainer inv = client.getItemContainer(InventoryID.INVENTORY);
-        if (inv == null) return -1;
-        Item[] items = inv.getItems();
-        for (int i = 0; i < items.length; i++) {
-            if (items[i] != null && items[i].getId() == itemId) return i;
-        }
-        return -1;
-    }
-
-    private void clickInventorySlot(int slot) {
-        Widget inv = client.getWidget(InterfaceID.Inventory.ITEMS);
-        if (inv == null || inv.isHidden()) return;
-        Widget[] children = inv.getChildren();
-        if (children == null || slot >= children.length) return;
-        Widget slotWidget = children[slot];
-        if (slotWidget == null || slotWidget.isHidden()) return;
-        GameFunctions.clickWidget(client, slotWidget);
     }
 
     private boolean isShopOpen() {

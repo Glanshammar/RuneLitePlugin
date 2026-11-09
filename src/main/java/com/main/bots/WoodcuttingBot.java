@@ -23,7 +23,6 @@ public class WoodcuttingBot {
 
     private enum State { IDLE, CHOPPING, WALKING_TO_BANK, BANKING }
 
-    private static final Duration ACTION_COOLDOWN = Duration.ofMillis(500);
     private static final Duration CHOP_START_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration BANK_OPEN_TIMEOUT = Duration.ofSeconds(10);
 
@@ -39,10 +38,6 @@ public class WoodcuttingBot {
     private static final int BANK_X = 2852;
     private static final int BANK_Y = 2951;
 
-    private static final Set<Integer> TREE_IDS = Set.of(
-            ObjectID.OAK_TREE, ObjectID.WILLOW_TREE, ObjectID.MAPLE_TREE,
-            ObjectID.YEW_TREE, ObjectID.MAGIC_TREE, ObjectID.MAGIC_TREE_10834
-    );
     private static final int BANK_CHEST = ObjectID.BANK_CHEST_14886;
     private static final int MAGIC_TREE = ObjectID.MAGIC_TREE_10834;
 
@@ -59,7 +54,6 @@ public class WoodcuttingBot {
 
     private State state = State.IDLE;
     private Instant lastActionAt = Instant.EPOCH;
-    private boolean running = false;
 
     // chop tracking
     private boolean choppingStarted = false;
@@ -97,18 +91,11 @@ public class WoodcuttingBot {
         if (client.getGameState() != GameState.LOGGED_IN) return;
         if (AntiBotDetector.isDetected()) return;
 
-        boolean shouldRun = config.botWoodcutting();
-        if (shouldRun != running) {
-            if (shouldRun) start(); else stop();
-            running = shouldRun;
-        }
+        boolean running = config.botWoodcutting();
         if (!running) return;
 
         Player player = client.getLocalPlayer();
         if (player == null) return;
-
-        // throttle actual game actions
-        if (Instant.now().isBefore(lastActionAt.plus(ACTION_COOLDOWN))) return;
 
         switch (state) {
             case IDLE:             tickIdle(player); break;
@@ -122,7 +109,7 @@ public class WoodcuttingBot {
     //  IDLE — pick and click a priority tree
     // ============================================================
     private void tickIdle(Player player) {
-        if (GameFunctions.isInventoryFull(client)) {
+        if (GameFunctions.isInventoryFull()) {
             log.info("Inventory full. Going to bank.");
             setState(State.WALKING_TO_BANK);
             return;
@@ -133,7 +120,7 @@ public class WoodcuttingBot {
             return;
         }
 
-        GameFunctions.clickObject(client, tree.getGameObject());
+        GameFunctions.clickObject(tree.getGameObject());
 
         choppingStarted = false;
         chopStartDeadline = Instant.now().plus(CHOP_START_TIMEOUT);
@@ -145,7 +132,7 @@ public class WoodcuttingBot {
     //  CHOPPING — wait for the tree to fall or inventory to fill
     // ============================================================
     private void tickChopping(Player player) {
-        if (GameFunctions.isInventoryFull(client)) {
+        if (GameFunctions.isInventoryFull()) {
             setState(State.WALKING_TO_BANK);
             return;
         }
@@ -170,7 +157,7 @@ public class WoodcuttingBot {
     //  WALKING_TO_BANK — click the bank chest
     // ============================================================
     private void tickWalkingToBank(Player player) {
-        if (!GameFunctions.isInventoryFull(client)) {
+        if (!GameFunctions.isInventoryFull()) {
             log.info("Inventory not full. Resuming");
             setState(State.IDLE);
             return;
@@ -183,7 +170,7 @@ public class WoodcuttingBot {
         }
 
         log.info("Clicking bank chest.");
-        GameFunctions.clickObject(client, bank.getGameObject());
+        GameFunctions.clickObject(bank.getGameObject());
 
         depositClicked = false;
         bankOpenDeadline = Instant.now().plus(BANK_OPEN_TIMEOUT);
@@ -194,7 +181,7 @@ public class WoodcuttingBot {
     //  BANKING — deposit, then close and resume
     // ============================================================
     private void tickBanking() {
-        if (!GameFunctions.isBankOpen(client)) {
+        if (!GameFunctions.isBankOpen()) {
             if (Instant.now().isAfter(bankOpenDeadline)) {
                 log.warn("Bank never opened. Retrying.");
                 setState(State.WALKING_TO_BANK);
@@ -202,10 +189,10 @@ public class WoodcuttingBot {
             return;
         }
 
-        if (GameFunctions.isInventoryFull(client)) {
+        if (GameFunctions.isInventoryFull()) {
             if (!depositClicked) {
                 log.info("Depositing inventory.");
-                GameFunctions.depositInventory(client);
+                GameFunctions.depositInventory();
                 lastActionAt = Instant.now();
                 depositClicked = true;
             }
@@ -213,7 +200,7 @@ public class WoodcuttingBot {
         }
 
         log.info("Inventory empty. closing bank.");
-        GameFunctions.keyPress(client, KeyEvent.VK_ESCAPE);
+        GameFunctions.keyPress(KeyEvent.VK_ESCAPE);
         depositClicked = false;
         setState(State.IDLE);
     }

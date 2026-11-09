@@ -82,7 +82,7 @@ public class CombatBot {
             Optional<NPC> crab = objectScanner.findNearestNpc(Set.of(14779));
             if (crab.isPresent()) {
                 log.info("Clicking Gemstone Crab");
-                GameFunctions.clickNpc(client, crab.get());
+                GameFunctions.clickNpc(crab.get());
                 state = State.ATTACKING;
             }
         }
@@ -104,7 +104,7 @@ public class CombatBot {
         Optional<GameObject> caveObject = objectScanner.findNearestObject(Set.of(57631));
         if (caveObject.isPresent()) {
             log.info("Gemstone Crab not found — clicking cave");
-            GameFunctions.clickObject(client, caveObject.get());
+            GameFunctions.clickObject(caveObject.get());
             state = State.WAITING;
         } else {
             log.debug("Neither Gemstone Crab nor cave object in scene");
@@ -119,6 +119,18 @@ public class CombatBot {
             return;
         }
 
+        int currentHp = client.getVarpValue(45);
+        int prayerPoints    = client.getVarpValue(1352);
+
+        if (currentHp <= 45) {
+            eatFood();
+            return;
+        }
+        if (prayerPoints <= 25) {
+            prayerPotion();
+            return;
+        }
+
         List<ObjectScanner.Target> npcs = objectScanner.findNpcs(npcIds);
 
         for (ObjectScanner.Target target : npcs) {
@@ -127,7 +139,7 @@ public class CombatBot {
             if (npc.isDead()) continue;
 
             log.info("Attacking {} ", npc.getName());
-            GameFunctions.clickNpc(client, npc);
+            GameFunctions.clickNpc(npc);
             state = State.ATTACKING;
             return;
         }
@@ -138,5 +150,13 @@ public class CombatBot {
 
     public void botNearestNpc() {
         botNearestNpc(null);
+    }
+
+    private void prayerPotion(){
+
+    }
+
+    private void eatFood(){
+
     }
 }
