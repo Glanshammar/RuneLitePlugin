@@ -22,10 +22,7 @@ public interface ApexeaConfig extends Config
             section = sectionFunctions,
             position = 0
     )
-    default boolean funcWidgets()
-    {
-        return false;
-    }
+    default boolean funcWidgets() { return false; }
 
     @ConfigSection(
             name = "Bots",
@@ -41,10 +38,7 @@ public interface ApexeaConfig extends Config
             section = sectionBots,
             position = 0
     )
-    default boolean botWoodcutting()
-    {
-        return false;
-    }
+    default boolean botWoodcutting() { return false; }
 
     @ConfigItem(
             keyName = "botThieveStalls",
@@ -53,10 +47,16 @@ public interface ApexeaConfig extends Config
             section = sectionBots,
             position = 1
     )
-    default boolean botThieveStalls()
-    {
-        return false;
-    }
+    default boolean botThieveStalls() { return false; }
+
+    @ConfigItem(
+            keyName = "botFiremaking",
+            name = "Firemaking",
+            description = "Runs the firemaking bot",
+            section = sectionBots,
+            position = 2
+    )
+    default boolean botFiremaking() { return false; }
 
     @ConfigSection(
             name = "Combat",
@@ -76,9 +76,9 @@ public interface ApexeaConfig extends Config
     { return false; }
 
     @ConfigItem(
-            keyName = "script",
-            name = "Script",
-            description = "Bot script. Pick one before enabling the combat bot.",
+            keyName = "combatScript",
+            name = "Combat Script",
+            description = "Combat script. Pick one before enabling the combat bot.",
             section = sectionCombat,
             position = 1)
     default CombatScript botCombatScript() { return CombatScript.NEAREST; }

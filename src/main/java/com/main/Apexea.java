@@ -5,6 +5,7 @@ import javax.inject.Inject;
 import com.google.inject.Provides;
 import com.main.bots.CombatBot;
 import com.main.bots.ThievingBot;
+import com.main.utils.GameFunctions;
 import com.main.utils.ObjectScanner;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
@@ -55,6 +56,12 @@ public class Apexea extends Plugin
 		eventBus.register(thievingBot);
 		combatBot = new CombatBot(client, config, objectScanner);
 		eventBus.register(combatBot);
+
+		GameFunctions.init(client);
+
+		configManager.setConfiguration(CONFIG_GROUP, "botWoodcutting", "false");
+		configManager.setConfiguration(CONFIG_GROUP, "botThieveStalls", "false");
+		configManager.setConfiguration(CONFIG_GROUP, "botCombat", "false");
 	}
 
 	@Override
@@ -66,8 +73,11 @@ public class Apexea extends Plugin
 		eventBus.unregister(thievingBot);
 		eventBus.unregister(combatBot);
 
+		GameFunctions.destroy();
+
 		configManager.setConfiguration(CONFIG_GROUP, "botWoodcutting", "false");
 		configManager.setConfiguration(CONFIG_GROUP, "botThieveStalls", "false");
+		configManager.setConfiguration(CONFIG_GROUP, "botCombat", "false");
 	}
 
 	@Subscribe
