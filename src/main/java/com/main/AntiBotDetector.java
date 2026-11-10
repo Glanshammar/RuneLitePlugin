@@ -188,6 +188,21 @@ public class AntiBotDetector {
         checkDetected = false;
     }
 
+    @Subscribe
+    public void onChatMessage(ChatMessage event) {
+        if (event.getMessage().contains("It will continue granting everyone 30% bonus experience for 2 hours.") ||
+                event.getMessage().contains("30% Bonus XP is active from the Well of Goodwill") ||
+                event.getMessage().contains("The Well of Goodwill has been filled!")) {
+            isWellActive = true;
+            log.info("Anti-Bot well timer updated.");
+        }
+
+        if (event.getMessage().contains("The Well of Goodwill is no longer granting bonus experience.")) {
+            isWellActive = false;
+            log.info("Anti-Bot well timer updated.");
+        }
+    }
+
     public static boolean isDetected(){ return checkDetected; }
 
     // ============================================================
