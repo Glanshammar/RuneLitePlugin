@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.Player;
 import net.runelite.api.Skill;
+import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetInfo;
@@ -64,8 +65,10 @@ public class AntiBotDetector {
         if (lower.contains("name of this server") || lower.contains("server name")) {
             if (lower.contains("backward") || lower.contains("reverse")) {
                 GameFunctions.typeText("arola");
+                log.info("Anti-Bot - Answer is 'arola'");
             } else {
                 GameFunctions.typeText("alora");
+                log.info("Anti-Bot - Answer is 'alora'");
             }
             GameFunctions.keyPress(KeyEvent.VK_ENTER);
             return;
@@ -73,16 +76,19 @@ public class AntiBotDetector {
 
         // Home city
         if (lower.contains("home city") || (lower.contains("alora") && lower.contains("city"))) {
-            GameFunctions.typeText("edge");
+            GameFunctions.typeText("edgeville");
             GameFunctions.keyPress(KeyEvent.VK_ENTER);
+            log.info("Anti-Bot - Answer is 'arola'");
             return;
         }
 
         // Combat level
         if (lower.contains("combat level")) {
             Player player = client.getLocalPlayer();
-            GameFunctions.typeText(String.valueOf(player.getCombatLevel()));
+            String combatLevel = String.valueOf(player.getCombatLevel());
+            GameFunctions.typeText(combatLevel);
             GameFunctions.keyPress(KeyEvent.VK_ENTER);
+            log.info("Anti-Bot - Answer is combat level {}", combatLevel);
             return;
         }
 
@@ -95,6 +101,7 @@ public class AntiBotDetector {
             }
             GameFunctions.typeText(String.valueOf(total));
             GameFunctions.keyPress(KeyEvent.VK_ENTER);
+            log.info("Anti-Bot - Answer is {}", total);
             return;
         }
 
@@ -102,8 +109,9 @@ public class AntiBotDetector {
         if (lower.contains("skill of the day")) {
             int day = LocalDate.now().getDayOfMonth();
             if (day <= 24) {
-                GameFunctions.typeText(SKILL_OF_THE_DAY[day - 1]);
+                GameFunctions.typeText(SKILL_OF_THE_DAY[day - 1].toLowerCase());
                 GameFunctions.keyPress(KeyEvent.VK_ENTER);
+                log.info("Anti-Bot - Answer is {}", SKILL_OF_THE_DAY[day - 1].toLowerCase());
             } else {
                 log.info("ANSWER: random (day {}) — cannot compute from date", day);
             }
@@ -119,12 +127,11 @@ public class AntiBotDetector {
         // Backwards spelling: How do you spell 'racecar' backwards?
         if (lower.contains("spell") && (lower.contains("backward") || lower.contains("reverse"))) {
             String quoted = extractQuoted(plain);
-            if (quoted != null) {
-                GameFunctions.typeText(String.valueOf(new StringBuilder(quoted).reverse()));
-                GameFunctions.keyPress(KeyEvent.VK_ENTER);
-            } else {
-                log.info("ANSWER: ? (no quoted word found)");
-            }
+            assert quoted != null;
+            String answer = String.valueOf(new StringBuilder(quoted).reverse());
+            GameFunctions.typeText(answer);
+            GameFunctions.keyPress(KeyEvent.VK_ENTER);
+            log.info("Anti-Bot - Answer is {}", answer);
             return;
         }
 
@@ -133,6 +140,7 @@ public class AntiBotDetector {
             String word = findCapitalWord(plain);
             GameFunctions.typeText(word);
             GameFunctions.keyPress(KeyEvent.VK_ENTER);
+            log.info("Anti-Bot - Answer is {}", word);
             return;
         }
 
@@ -141,6 +149,7 @@ public class AntiBotDetector {
             String word = findColoredWord(tokens);
             GameFunctions.typeText(word);
             GameFunctions.keyPress(KeyEvent.VK_ENTER);
+            log.info("Anti-Bot - Answer is {}", word);
             return;
         }
 
@@ -149,6 +158,7 @@ public class AntiBotDetector {
             String word = findWordNextToIcon(tokens);
             GameFunctions.typeText(word);
             GameFunctions.keyPress(KeyEvent.VK_ENTER);
+            log.info("Anti-Bot - Answer is {}", word);
             return;
         }
 
@@ -156,12 +166,14 @@ public class AntiBotDetector {
         if (lower.contains("9+10")) {
             GameFunctions.typeText("21");
             GameFunctions.keyPress(KeyEvent.VK_ENTER);
+            log.info("Anti-Bot - Answer is 21");
             return;
         }
 
         if (lower.contains("9x6")) {
             GameFunctions.typeText("54");
             GameFunctions.keyPress(KeyEvent.VK_ENTER);
+            log.info("Anti-Bot - Answer is 54");
             return;
         }
 
@@ -171,9 +183,7 @@ public class AntiBotDetector {
     @Subscribe
     public void onGameTick(GameTick event) {
         Widget inputWidget = client.getWidget(WidgetInfo.CHATBOX_TITLE);
-        if (inputWidget == null) {
-            return;
-        }
+        if (inputWidget == null) return;
 
         String questionRaw = inputWidget.getText();
         if (questionRaw == null) return;
@@ -185,7 +195,6 @@ public class AntiBotDetector {
         lastQuestion = questionPlain;
         log.info("Anti-bot detected!");
         solveQuestion(questionRaw, questionPlain);
-        checkDetected = false;
     }
 
     @Subscribe
