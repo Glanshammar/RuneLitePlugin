@@ -17,8 +17,11 @@ import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
+import net.runelite.client.plugins.PluginDependency;
 import net.runelite.client.plugins.PluginDescriptor;
 import com.main.bots.WoodcuttingBot;
+import net.runelite.client.plugins.slayer.SlayerPlugin;
+import net.runelite.client.plugins.slayer.SlayerPluginService;
 
 import java.util.List;
 
@@ -26,6 +29,7 @@ import java.util.List;
 @PluginDescriptor(
 	name = "Apexea"
 )
+@PluginDependency(SlayerPlugin.class)
 public class Apexea extends Plugin
 {
 	private static final String CONFIG_GROUP = "Apexea";
@@ -39,12 +43,14 @@ public class Apexea extends Plugin
 	@Inject private Client client;
 	@Inject private ClientThread clientThread;
 	@Inject private EventBus eventBus;
+	@Inject private SlayerPluginService slayerService;
 	private ObjectScanner objectScanner;
 	private AntiBotDetector antiBotDetector;
 	private WoodcuttingBot woodcuttingBot;
 	private ThievingBot thievingBot;
 	private CombatBot combatBot;
 	private FiremakingBot firemakingBot;
+
 	@Override
 	protected void startUp() {
 		objectScanner = new ObjectScanner(client, config);
@@ -55,17 +61,13 @@ public class Apexea extends Plugin
 		eventBus.register(woodcuttingBot);
 		thievingBot = new ThievingBot(client, config, objectScanner);
 		eventBus.register(thievingBot);
-		combatBot = new CombatBot(client, config, objectScanner);
+		combatBot = new CombatBot(client, config, objectScanner, slayerService);
 		eventBus.register(combatBot);
 		firemakingBot = new FiremakingBot(client, config, objectScanner);
 		eventBus.register(firemakingBot);
 
 		GameFunctions.init(client);
-
-		configManager.setConfiguration(CONFIG_GROUP, "botWoodcutting", "false");
-		configManager.setConfiguration(CONFIG_GROUP, "botThieveStalls", "false");
-		configManager.setConfiguration(CONFIG_GROUP, "botCombat", "false");
-		configManager.setConfiguration(CONFIG_GROUP, "botFiremaking", "false");
+		resetConfigurations();
 	}
 
 	@Override
@@ -79,11 +81,7 @@ public class Apexea extends Plugin
 		eventBus.unregister(firemakingBot);
 
 		GameFunctions.destroy();
-
-		configManager.setConfiguration(CONFIG_GROUP, "botWoodcutting", "false");
-		configManager.setConfiguration(CONFIG_GROUP, "botThieveStalls", "false");
-		configManager.setConfiguration(CONFIG_GROUP, "botCombat", "false");
-		configManager.setConfiguration(CONFIG_GROUP, "botFiremaking", "false");
+		resetConfigurations();
 	}
 
 	@Subscribe
@@ -133,6 +131,14 @@ public class Apexea extends Plugin
 
 		client.addChatMessage(ChatMessageType.GAMEMESSAGE,
 				"", "<col=ff0000>" + msg + "</col>", null);
+	}
+
+	private void resetConfigurations(){
+		configManager.setConfiguration(CONFIG_GROUP, "botWoodcutting", "false");
+		configManager.setConfiguration(CONFIG_GROUP, "botThieveStalls", "false");
+		configManager.setConfiguration(CONFIG_GROUP, "botCombat", "false");
+		configManager.setConfiguration(CONFIG_GROUP, "botFiremaking", "false");
+		configManager.setConfiguration(CONFIG_GROUP, "targetName", "");
 	}
 
 	@Provides

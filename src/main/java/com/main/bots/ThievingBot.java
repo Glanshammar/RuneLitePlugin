@@ -4,12 +4,14 @@ import com.main.AntiBotDetector;
 import com.main.ApexeaConfig;
 import com.main.utils.GameFunctions;
 import com.main.utils.ObjectScanner;
+import com.main.utils.Waiter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.eventbus.Subscribe;
 
 import java.awt.event.KeyEvent;
@@ -20,7 +22,7 @@ import java.util.Set;
 
 @Slf4j
 public class ThievingBot {
-    private enum State { IDLE, STEALING, SELLING }
+    private enum State { IDLE, STEALING, SELLING, BOTCHECK }
     private static final Duration SHOP_OPEN_TIMEOUT = Duration.ofSeconds(15);
 
     private static final int STALL = 4878; // Scimitar Stall
@@ -36,8 +38,8 @@ public class ThievingBot {
     private boolean running = false;
 
     // steal tracking
-    private int lastStolenCount = 0;
-    private Instant stealStartDeadline = Instant.EPOCH;
+    private int idleTicks;
+    private boolean waitingForDetection = false;
 
     // shop tracking
     private Instant shopOpenDeadline = Instant.EPOCH;
@@ -52,7 +54,7 @@ public class ThievingBot {
         log.info("Thieving bot starting");
         state = State.STEALING;
         lastActionAt = Instant.EPOCH;
-        lastStolenCount = 0;
+        idleTicks = 0;
         objectScanner.addObjectIds(Set.of(STALL));
     }
 
@@ -76,10 +78,36 @@ public class ThievingBot {
         Player player = client.getLocalPlayer();
         if (player == null) return;
 
+        if (player.getAnimation() != -1) { idleTicks = 0; } // Is active
+        if (player.getAnimation() == -1) { idleTicks++; } // Is not active
+        if (idleTicks >= 8) { state = State.BOTCHECK; }
+
         if(state == State.STEALING){
             tickStealing(player);
         } else if (state == State.SELLING) {
             tickSelling(player);
+        } else if (state == State.BOTCHECK) {
+            tickBotcheck(player);
+        }
+    }
+
+    private void tickBotcheck(Player player){
+        if (AntiBotDetector.isDetected()) return;
+        if (idleTicks <= 14) return;
+
+        if (waitingForDetection) {
+            if (AntiBotDetector.isDetected()) {
+                waitingForDetection = false;
+            }
+            return; // do nothing else this tick
+        }
+
+        Widget inputWidget = client.getWidget(WidgetInfo.CHATBOX_TITLE);
+
+        if (inputWidget == null) {
+            ObjectScanner.Target stall = findStall(player);
+            if (stall == null) return;
+            GameFunctions.clickObject(stall.getGameObject());
         }
     }
 
@@ -94,12 +122,7 @@ public class ThievingBot {
         }
 
         ObjectScanner.Target stall = findStall(player);
-        if (stall == null) {
-            log.debug("Stall {} not visible", STALL);
-            return;
-        }
-
-        log.info("Stealing from stall at {}", stall.getWorldPosition());
+        if (stall == null) return;
         GameFunctions.clickObject(stall.getGameObject());
         setState(State.STEALING);
     }
@@ -128,6 +151,7 @@ public class ThievingBot {
         }
 
         int slot = GameFunctions.findSlotWithItem(SELL_ITEM);
+        log.info("Scimitar slot: {}", slot);
         if (slot < 0) {
             log.info("All scimitars sold — closing shop");
             GameFunctions.keyPress(KeyEvent.VK_ESCAPE);

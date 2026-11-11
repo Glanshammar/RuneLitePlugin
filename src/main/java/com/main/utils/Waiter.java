@@ -56,6 +56,14 @@ public class Waiter implements AutoCloseable {
                 onSuccess, onFailure);
     }
 
+    public static void waitFor(String label,
+                               boolean condition,
+                               Runnable onSuccess,
+                               Runnable onFailure,
+                               Duration timeoutSeconds) {
+        waitFor(label, () -> condition, onSuccess, onFailure, timeoutSeconds);
+    }
+
     public boolean isDone() { return done; }
 
     public void cancel() { done = true; }

@@ -9,20 +9,20 @@ import net.runelite.client.config.ConfigSection;
 public interface ApexeaConfig extends Config
 {
     @ConfigSection(
-            name = "Functions",
-            description = "Activate functions in the plugin.",
+            name = "Testing",
+            description = "Sections for testing stuff",
             position = 0
     )
-    String sectionFunctions = "Functions";
+    String sectionTesting = "Testing";
 
     @ConfigItem(
-            keyName = "funcWidgets",
-            name = "Widgets",
-            description = "Runs the widgets function",
-            section = sectionFunctions,
+            keyName = "funcTesting",
+            name = "Testing",
+            description = "Runs the testing function",
+            section = sectionTesting,
             position = 0
     )
-    default boolean funcWidgets() { return false; }
+    default boolean funcTesting() { return false; }
 
     @ConfigSection(
             name = "Bots",
@@ -82,6 +82,14 @@ public interface ApexeaConfig extends Config
             section = sectionCombat,
             position = 1)
     default CombatScript botCombatScript() { return CombatScript.NEAREST; }
+
+    @ConfigItem(
+            keyName = "targetName",
+            name = "Target Name",
+            description = "Comma-separated list of NPC names to target for the 'Nearest' script.",
+            section = sectionCombat,
+            position = 2)
+    default String botTargetName() { return ""; }
 
     enum CombatScript{
         NEAREST,

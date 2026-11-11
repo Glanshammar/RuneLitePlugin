@@ -13,7 +13,7 @@ repositories {
 	mavenCentral()
 }
 
-def runeLiteVersion = 'latest.release'
+def runeLiteVersion = '1.13.6'
 def pluginMainClass = 'com.main.ExamplePluginTest'
 
 dependencies {
@@ -28,7 +28,7 @@ dependencies {
 	testImplementation "net.runelite:jshell:$runeLiteVersion"
 }
 
-group = 'com.example'
+group = 'com.apexea'
 
 tasks.withType(JavaCompile).configureEach {
 	options.encoding = 'UTF-8'

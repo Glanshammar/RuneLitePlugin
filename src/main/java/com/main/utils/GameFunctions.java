@@ -7,6 +7,8 @@ import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetInfo;
+import net.runelite.api.widgets.WidgetItem;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -31,12 +33,15 @@ public class GameFunctions {
     public static void init(Client c)  { client = c; }
     public static void destroy()       { client = null; }
 
-    public static void startWaitTimer(){
-        waitingSince = Instant.now();
-    }
+    public static void startWaitTimer(){ waitingSince = Instant.now(); }
+    public static void resetTimer() { waitingSince = null; }
 
-    public static boolean ifTimeWaited(Duration duration){
-        return waitingSince != null && Duration.between(waitingSince, Instant.now()).compareTo(duration) > 0;
+    public static boolean ifTimeWaited(Duration duration) {
+        if (waitingSince == null) return false;
+
+        boolean elapsed = Duration.between(waitingSince, Instant.now()).compareTo(duration) > 0;
+        if (elapsed) waitingSince = null;
+        return elapsed;
     }
 
     public static void click(int leftRight, int x, int y) {
@@ -48,55 +53,38 @@ public class GameFunctions {
             return;
         }
 
-        canvas.dispatchEvent(new MouseEvent(canvas, MouseEvent.MOUSE_MOVED,
-                System.currentTimeMillis(), 0, x, y, 0, false, MouseEvent.NOBUTTON));
-        canvas.dispatchEvent(new MouseEvent(canvas, MouseEvent.MOUSE_PRESSED,
-                System.currentTimeMillis(), 0, x, y, 1, false, leftRight)); //1 = left, 3 = right
-        canvas.dispatchEvent(new MouseEvent(canvas, MouseEvent.MOUSE_RELEASED,
-                System.currentTimeMillis(), 0, x, y, 1, false, leftRight));
+        // Get the system-wide AWT event queue once.
+        EventQueue eventQueue = Toolkit.getDefaultToolkit().getSystemEventQueue();
+        long now = System.currentTimeMillis();
+
+        // 1. Mouse Moved (optional, but often needed for hover state)
+        eventQueue.postEvent(new MouseEvent(canvas, MouseEvent.MOUSE_MOVED,
+                now, 0, x, y, 0, false, MouseEvent.NOBUTTON));
+
+        // 2. Mouse Pressed
+        eventQueue.postEvent(new MouseEvent(canvas, MouseEvent.MOUSE_PRESSED,
+                now, 0, x, y, 1, false, leftRight));
+
+        // 3. Mouse Released
+        eventQueue.postEvent(new MouseEvent(canvas, MouseEvent.MOUSE_RELEASED,
+                now, 0, x, y, 1, false, leftRight));
     }
 
     public static void menuAction(int objectId, String option){
         client.menuAction(-1, -1, MenuAction.GAME_OBJECT_FIRST_OPTION, objectId, -1, option, "");
     }
 
-    public static boolean selectMenuOption(String optionText) {
-        MenuEntry[] entries = client.getMenuEntries();
-        if (entries == null || entries.length == 0) {
-            log.warn("selectMenuOption: menu is empty");
-            return false;
-        }
-
-        int menuX = client.getMenuX();
-        int menuY = client.getMenuY();
-        log.info("menu at ({},{}) with {} entries", menuX, menuY, entries.length);
-
-        for (int i = 0; i < entries.length; i++) {
-            MenuEntry e = entries[i];
-            log.info("  [{}] top-row={} option='{}' target='{}'",
-                    i, entries.length - 1 - i, e.getOption(), e.getTarget());
-
-            if (optionText.equalsIgnoreCase(e.getOption())) {
-                int rowFromTop = entries.length - 1 - i;
-                int clickX = menuX + 40;                       // left-ish inside the menu
-                int clickY = menuY + rowFromTop * 15 + 7;      // 15px row height, 7 to center
-
-                log.info("selectMenuOption: clicking '{}' at ({},{})",
-                        optionText, clickX, clickY);
-
-                Canvas canvas = client.getCanvas();
-                long now = System.currentTimeMillis();
-                canvas.dispatchEvent(new MouseEvent(canvas, MouseEvent.MOUSE_MOVED,
-                        now, 0, clickX, clickY, 0, false, MouseEvent.NOBUTTON));
-                canvas.dispatchEvent(new MouseEvent(canvas, MouseEvent.MOUSE_PRESSED,
-                        now, 0, clickX, clickY, 1, false, MouseEvent.BUTTON1));
-                canvas.dispatchEvent(new MouseEvent(canvas, MouseEvent.MOUSE_RELEASED,
-                        now, 0, clickX, clickY, 1, false, MouseEvent.BUTTON1));
-                return true;
-            }
-        }
-        log.warn("selectMenuOption: '{}' not found", optionText);
-        return false;
+    public static void menuClickWidget(WidgetInfo targetWidgetId, MenuAction menuAction, String optionText, String targetText){
+        Widget widget = client.getWidget(targetWidgetId);
+        client.menuAction(
+                0,                        // p0 (child index, 0 for the widget itself)
+                widget.getId(),             // p1 (widget ID)
+                menuAction,               // action type
+                0,                        // id
+                -1,                       // itemId (none)
+                optionText,               // option text
+                targetText                // target text
+        );
     }
 
     public static void walkToTile(WorldPoint targetTile) {
@@ -130,6 +118,7 @@ public class GameFunctions {
         int x = bounds.x + bounds.width / 2;
         int y = bounds.y + bounds.height / 2;
         click(MouseEvent.BUTTON1, x, y);
+        log.info("clickWidget: Clicked widget.");
     }
 
     public static void clickObject(GameObject obj) {
@@ -198,19 +187,52 @@ public class GameFunctions {
         if (inv == null) return -1;
         Item[] items = inv.getItems();
         for (int i = 0; i < items.length; i++) {
-            if (items[i] != null && items[i].getId() == itemId) return i;
+            if (items[i] != null && items[i].getId() == itemId) {
+                log.info("Found slot with item ID {} at slot {}", itemId, i+1);
+                return i+1;
+            }
         }
+
+        log.warn("Found no slot with item ID {}", itemId);
         return -1;
     }
 
     public static void clickInventorySlot(int slot) {
-        Widget inv = client.getWidget(InterfaceID.Inventory.ITEMS);
-        if (inv == null || inv.isHidden()) return;
-        Widget[] children = inv.getChildren();
-        if (children == null || slot >= children.length) return;
-        Widget slotWidget = children[slot];
-        if (slotWidget == null || slotWidget.isHidden()) return;
-        GameFunctions.clickWidget(slotWidget);
+        Widget inventoryWidget = client.getWidget(WidgetInfo.INVENTORY);
+        if (inventoryWidget == null) {
+            log.warn("Inventory widget not found.");
+            return;
+        }
+
+        Rectangle invBounds = inventoryWidget.getBounds();
+        if (invBounds == null || invBounds.width <= 0 || invBounds.height <= 0) {
+            log.warn("Inventory widget has invalid bounds.");
+            return;
+        }
+
+        // Slot layout constants (mirrors InventoryTilesOverlay)
+        final int slotWidth  = 36;
+        final int slotHeight = 32;
+        final int padX       = 6;
+        final int padY       = 4;
+        final int columns    = 4;
+        final int offsetX    = 16;
+        final int offsetY    = 8;
+
+        // Row/column of the target slot
+        int row = slot / columns;
+        int col = slot % columns;
+
+        // Top-left corner of the slot
+        int slotX = invBounds.x + offsetX + (slotWidth + padX) * col;
+        int slotY = invBounds.y + offsetY + (slotHeight + padY) * row;
+
+        // Center of the slot
+        int centerX = slotX + slotWidth / 2;
+        int centerY = slotY + slotHeight / 2;
+
+        GameFunctions.click(MouseEvent.BUTTON1, centerX, centerY);
+        log.info("Clicked inventory slot {} at ({}, {}).", slot, centerX, centerY);
     }
 
     public static boolean login(String username, String password) {
@@ -247,10 +269,13 @@ public class GameFunctions {
     public static void keyPress(int keyCode) {
         Canvas canvas = client.getCanvas();
         if (canvas == null) return;
+
+        EventQueue eventQueue = Toolkit.getDefaultToolkit().getSystemEventQueue();
         long now = System.currentTimeMillis();
-        canvas.dispatchEvent(new KeyEvent(canvas, KeyEvent.KEY_PRESSED,
+
+        eventQueue.postEvent(new KeyEvent(canvas, KeyEvent.KEY_PRESSED,
                 now, 0, keyCode, KeyEvent.CHAR_UNDEFINED));
-        canvas.dispatchEvent(new KeyEvent(canvas, KeyEvent.KEY_RELEASED,
+        eventQueue.postEvent(new KeyEvent(canvas, KeyEvent.KEY_RELEASED,
                 now, 0, keyCode, KeyEvent.CHAR_UNDEFINED));
     }
 
@@ -306,7 +331,7 @@ public class GameFunctions {
             log.warn("Deposit-inventory widget not found");
             return;
         }
-        GameFunctions.clickWidget(deposit);
+        clickWidget(deposit);
     }
 
     public static void sendCommand(String command) {
