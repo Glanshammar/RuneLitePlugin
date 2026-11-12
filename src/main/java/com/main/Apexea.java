@@ -3,9 +3,7 @@ package com.main;
 import javax.inject.Inject;
 
 import com.google.inject.Provides;
-import com.main.bots.CombatBot;
-import com.main.bots.FiremakingBot;
-import com.main.bots.ThievingBot;
+import com.main.bots.*;
 import com.main.utils.GameFunctions;
 import com.main.utils.ObjectScanner;
 import lombok.extern.slf4j.Slf4j;
@@ -19,7 +17,6 @@ import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDependency;
 import net.runelite.client.plugins.PluginDescriptor;
-import com.main.bots.WoodcuttingBot;
 import net.runelite.client.plugins.slayer.SlayerPlugin;
 import net.runelite.client.plugins.slayer.SlayerPluginService;
 
@@ -36,7 +33,10 @@ public class Apexea extends Plugin
 	private static final List<String> BOT_KEYS = List.of(
 			"botWoodcutting",
 			"botThieveStalls",
-			"botCombat"
+			"botCombat",
+			"botFiremaking",
+			"botFletching",
+			"botTOG"
 	);
 	@Inject private ApexeaConfig config;
 	@Inject private ConfigManager configManager;
@@ -49,7 +49,9 @@ public class Apexea extends Plugin
 	private WoodcuttingBot woodcuttingBot;
 	private ThievingBot thievingBot;
 	private CombatBot combatBot;
+	private FletchingBot fletchingBot;
 	private FiremakingBot firemakingBot;
+	private TearsOfGuthixBot togBot;
 
 	@Override
 	protected void startUp() {
@@ -65,6 +67,10 @@ public class Apexea extends Plugin
 		eventBus.register(combatBot);
 		firemakingBot = new FiremakingBot(client, config, objectScanner);
 		eventBus.register(firemakingBot);
+		fletchingBot = new FletchingBot(client, config, objectScanner);
+		eventBus.register(fletchingBot);
+		togBot = new TearsOfGuthixBot(client, config, objectScanner);
+		eventBus.register(togBot);
 
 		GameFunctions.init(client);
 		resetConfigurations();
@@ -79,6 +85,8 @@ public class Apexea extends Plugin
 		eventBus.unregister(thievingBot);
 		eventBus.unregister(combatBot);
 		eventBus.unregister(firemakingBot);
+		eventBus.unregister(fletchingBot);
+		eventBus.unregister(togBot);
 
 		GameFunctions.destroy();
 		resetConfigurations();
@@ -120,6 +128,14 @@ public class Apexea extends Plugin
 				&& Boolean.parseBoolean(event.getNewValue())) {
 			thievingBot.start();
 		}
+		if ("botFletching".equals(event.getKey())
+				&& Boolean.parseBoolean(event.getNewValue())) {
+			fletchingBot.start();
+		}
+		if ("botTOG".equals(event.getKey())
+				&& Boolean.parseBoolean(event.getNewValue())) {
+			togBot.start();
+		}
 	}
 
 	private void sendConflictMessage(String attempted, String alreadyRunning) {
@@ -138,6 +154,7 @@ public class Apexea extends Plugin
 		configManager.setConfiguration(CONFIG_GROUP, "botThieveStalls", "false");
 		configManager.setConfiguration(CONFIG_GROUP, "botCombat", "false");
 		configManager.setConfiguration(CONFIG_GROUP, "botFiremaking", "false");
+		configManager.setConfiguration(CONFIG_GROUP, "botFletching", "false");
 		configManager.setConfiguration(CONFIG_GROUP, "targetName", "");
 	}
 

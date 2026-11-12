@@ -58,6 +58,24 @@ public interface ApexeaConfig extends Config
     )
     default boolean botFiremaking() { return false; }
 
+    @ConfigItem(
+            keyName = "botFletching",
+            name = "Fletching",
+            description = "Runs the fletching bot",
+            section = sectionBots,
+            position = 3
+    )
+    default boolean botFletching() { return false; }
+
+    @ConfigItem(
+            keyName = "botTOG",
+            name = "Tears of Guthix",
+            description = "Runs the Tears of Guthix bot",
+            section = sectionBots,
+            position = 4
+    )
+    default boolean botTOG() { return false; }
+
     @ConfigSection(
             name = "Combat",
             description = "",
