@@ -1,7 +1,6 @@
 package com.main.utils;
 
 import com.main.ApexeaConfig;
-import com.main.data.ObjectDto;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
 import net.runelite.api.Point;
@@ -120,6 +119,20 @@ public class ObjectScanner {
 
     public Optional<NPC> findNearestNpc(Set<Integer> ids) {
         return findNpcs(ids).stream().findFirst().map(Target::getNpc);
+    }
+
+    public NPC findNpc(int npcId, Player player) {
+        int plane = player.getWorldLocation().getPlane();
+        NPC best = null;
+        int bestDist = Integer.MAX_VALUE;
+        for (NPC npc : client.getNpcs()) {
+            if (npc == null || npc.getId() != npcId) continue;
+            WorldPoint wp = npc.getWorldLocation();
+            if (wp == null || wp.getPlane() != plane) continue;
+            int d = player.getWorldLocation().distanceTo(wp);
+            if (d < bestDist) { bestDist = d; best = npc; }
+        }
+        return best;
     }
 
     private List<Target> findNpcsMatching(IntPredicate filter) {
