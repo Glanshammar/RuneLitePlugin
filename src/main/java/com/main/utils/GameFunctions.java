@@ -8,7 +8,6 @@ import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetInfo;
-import net.runelite.api.widgets.WidgetItem;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -33,7 +32,7 @@ public class GameFunctions {
     public static void init(Client c)  { client = c; }
     public static void destroy()       { client = null; }
 
-    public static void startWaitTimer(){ waitingSince = Instant.now(); }
+    public static void startTimer(){ waitingSince = Instant.now(); }
     public static void resetTimer() { waitingSince = null; }
 
     public static boolean ifTimeWaited(Duration duration) {
