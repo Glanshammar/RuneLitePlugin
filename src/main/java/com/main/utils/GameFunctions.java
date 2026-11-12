@@ -52,6 +52,8 @@ public class GameFunctions {
             return;
         }
 
+        ClickTracker.record(x, y, leftRight);
+
         // Get the system-wide AWT event queue once.
         EventQueue eventQueue = Toolkit.getDefaultToolkit().getSystemEventQueue();
         long now = System.currentTimeMillis();
