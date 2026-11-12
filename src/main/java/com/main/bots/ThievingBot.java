@@ -4,10 +4,8 @@ import com.main.AntiBotDetector;
 import com.main.ApexeaConfig;
 import com.main.utils.GameFunctions;
 import com.main.utils.ObjectScanner;
-import com.main.utils.Waiter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
-import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
@@ -18,6 +16,7 @@ import java.awt.event.KeyEvent;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 @Slf4j
@@ -34,7 +33,6 @@ public class ThievingBot {
     private final ObjectScanner objectScanner;
 
     private State state = State.STEALING;
-    private Instant lastActionAt = Instant.EPOCH;
     private boolean running = false;
 
     // steal tracking
@@ -53,7 +51,6 @@ public class ThievingBot {
     public void start() {
         log.info("Thieving bot starting");
         state = State.STEALING;
-        lastActionAt = Instant.EPOCH;
         idleTicks = 0;
         objectScanner.addObjectIds(Set.of(STALL));
     }
@@ -85,7 +82,7 @@ public class ThievingBot {
         if(state == State.STEALING){
             tickStealing(player);
         } else if (state == State.SELLING) {
-            tickSelling(player);
+            tickSelling();
         } else if (state == State.BOTCHECK) {
             tickBotcheck(player);
         }
@@ -130,18 +127,16 @@ public class ThievingBot {
     // ============================================================
     //  SELLING — click NPC once, wait for shop, sell one per tick
     // ============================================================
-    private void tickSelling(Player player) {
+    private void tickSelling() {
         if (!isShopOpen()) {
             if (shopOpenDeadline.equals(Instant.EPOCH)) {
-                NPC npc = findNpc(SELLER_NPC, player);
-                if (npc == null) {
+                Optional<NPC> npc = objectScanner.findNearestNpc(Set.of(SELLER_NPC));
+                if (npc.isEmpty()) {
                     log.debug("Seller NPC {} not visible", SELLER_NPC);
                     return;
                 }
-                log.info("Clicking seller NPC");
-                GameFunctions.clickNpc(npc);
+                GameFunctions.clickNpc(npc.get());
                 shopOpenDeadline = Instant.now().plus(SHOP_OPEN_TIMEOUT);
-                lastActionAt = Instant.now();
                 return;
             }
             if (Instant.now().isAfter(shopOpenDeadline)) {
@@ -155,14 +150,12 @@ public class ThievingBot {
         if (slot < 0) {
             log.info("All scimitars sold — closing shop");
             GameFunctions.keyPress(KeyEvent.VK_ESCAPE);
-            lastActionAt = Instant.now();
             setState(State.STEALING);
             return;
         }
 
         log.debug("Selling scimitar in slot {}", slot);
         GameFunctions.clickInventorySlot(slot);
-        lastActionAt = Instant.now();
     }
 
     // ============================================================
@@ -171,7 +164,6 @@ public class ThievingBot {
     private void setState(State s) {
         if (state != s) log.debug("State {} → {}", state, s);
         state = s;
-        lastActionAt = Instant.now();
     }
 
     private ObjectScanner.Target findStall(Player player) {
@@ -185,20 +177,6 @@ public class ThievingBot {
             }
         }
         return null;
-    }
-
-    private NPC findNpc(int npcId, Player player) {
-        int plane = player.getWorldLocation().getPlane();
-        NPC best = null;
-        int bestDist = Integer.MAX_VALUE;
-        for (NPC npc : client.getNpcs()) {
-            if (npc == null || npc.getId() != npcId) continue;
-            WorldPoint wp = npc.getWorldLocation();
-            if (wp == null || wp.getPlane() != plane) continue;
-            int d = player.getWorldLocation().distanceTo(wp);
-            if (d < bestDist) { bestDist = d; best = npc; }
-        }
-        return best;
     }
 
     private boolean isShopOpen() {
