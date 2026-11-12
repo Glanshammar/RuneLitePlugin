@@ -4,11 +4,11 @@ import javax.inject.Inject;
 
 import com.google.inject.Provides;
 import com.main.bots.*;
-import com.main.utils.GameFunctions;
-import com.main.utils.ObjectScanner;
+import com.main.utils.*;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
+import net.runelite.api.events.GameTick;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.EventBus;
@@ -19,6 +19,7 @@ import net.runelite.client.plugins.PluginDependency;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.slayer.SlayerPlugin;
 import net.runelite.client.plugins.slayer.SlayerPluginService;
+import net.runelite.client.ui.overlay.OverlayManager;
 
 import java.util.List;
 
@@ -44,6 +45,8 @@ public class Apexea extends Plugin
 	@Inject private ClientThread clientThread;
 	@Inject private EventBus eventBus;
 	@Inject private SlayerPluginService slayerService;
+	@Inject private OverlayManager overlayManager;
+	@Inject private ClickIndicatorOverlay clickIndicatorOverlay;
 	private ObjectScanner objectScanner;
 	private AntiBotDetector antiBotDetector;
 	private WoodcuttingBot woodcuttingBot;
@@ -72,6 +75,7 @@ public class Apexea extends Plugin
 		togBot = new TearsOfGuthixBot(client, config, objectScanner);
 		eventBus.register(togBot);
 
+		overlayManager.add(clickIndicatorOverlay);
 		GameFunctions.init(client);
 		resetConfigurations();
 	}
@@ -88,6 +92,8 @@ public class Apexea extends Plugin
 		eventBus.unregister(fletchingBot);
 		eventBus.unregister(togBot);
 
+		overlayManager.remove(clickIndicatorOverlay);
+		ClickTracker.clear();
 		GameFunctions.destroy();
 		resetConfigurations();
 	}
@@ -109,7 +115,6 @@ public class Apexea extends Plugin
 				continue;
 			}
 			if (Boolean.parseBoolean(configManager.getConfiguration(CONFIG_GROUP, otherKey))) {
-				// A different bot is already running -> revert this change
 				configManager.setConfiguration(CONFIG_GROUP, event.getKey(), false);
 				sendConflictMessage(event.getKey(), otherKey);
 				return;
@@ -136,6 +141,11 @@ public class Apexea extends Plugin
 				&& Boolean.parseBoolean(event.getNewValue())) {
 			togBot.start();
 		}
+	}
+
+	@Subscribe
+	public void onGameTick(GameTick event) {
+		ClickTracker.clear();
 	}
 
 	private void sendConflictMessage(String attempted, String alreadyRunning) {
