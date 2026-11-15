@@ -24,6 +24,15 @@ public interface ApexeaConfig extends Config
     )
     default boolean funcTesting() { return false; }
 
+    @ConfigItem(
+            keyName = "funcTesting2",
+            name = "Testing 2",
+            description = "Runs the testing 2 function",
+            section = sectionTesting,
+            position = 1
+    )
+    default boolean funcTesting2() { return false; }
+
     @ConfigSection(
             name = "Bots",
             description = "",
@@ -68,13 +77,38 @@ public interface ApexeaConfig extends Config
     default boolean botFletching() { return false; }
 
     @ConfigItem(
-            keyName = "botTOG",
-            name = "Tears of Guthix",
-            description = "Runs the Tears of Guthix bot",
+            keyName = "botMinis",
+            name = "Mini Bots",
+            description = "Runs a mini bot by your choice",
             section = sectionBots,
             position = 4
     )
-    default boolean botTOG() { return false; }
+    default boolean botMinis() { return false; }
+
+    @ConfigItem(
+            keyName = "miniBotsScript",
+            name = "Minibot Script",
+            description = "Minibot script. Pick one before enabling the combat bot.",
+            section = sectionBots,
+            position = 5)
+    default MiniBots botMiniScript() { return MiniBots.SELL_THIEVE; }
+
+    @ConfigItem(
+            keyName = "botHunter",
+            name = "Hunter",
+            description = "Runs the Hunter bot",
+            section = sectionBots,
+            position = 6
+    )
+    default boolean botHunter() { return false; }
+
+    @ConfigItem(
+            keyName = "hunterScript",
+            name = "Hunter Script",
+            description = "Hunter script. Pick one before enabling the Hunter bot.",
+            section = sectionBots,
+            position = 7)
+    default HunterScript botHunterScript() { return HunterScript.SALAMANDERS; }
 
     @ConfigSection(
             name = "Combat",
@@ -113,5 +147,14 @@ public interface ApexeaConfig extends Config
         NEAREST,
         GEMSTONE_CRAB,
         SLAYER,
+    }
+
+    enum MiniBots{
+        SELL_THIEVE
+    }
+
+    enum HunterScript{
+        SALAMANDERS,
+        CHINCHOMPAS
     }
 }

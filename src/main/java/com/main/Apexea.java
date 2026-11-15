@@ -5,10 +5,13 @@ import javax.inject.Inject;
 import com.google.inject.Provides;
 import com.main.bots.*;
 import com.main.utils.*;
+import com.main.tests.*;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
+import net.runelite.api.MenuEntry;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.events.MenuOpened;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.EventBus;
@@ -21,6 +24,7 @@ import net.runelite.client.plugins.slayer.SlayerPlugin;
 import net.runelite.client.plugins.slayer.SlayerPluginService;
 import net.runelite.client.ui.overlay.OverlayManager;
 
+import java.io.IOException;
 import java.util.List;
 
 @Slf4j
@@ -37,6 +41,7 @@ public class Apexea extends Plugin
 			"botCombat",
 			"botFiremaking",
 			"botFletching",
+			"botHunter",
 			"botTOG"
 	);
 	@Inject private ApexeaConfig config;
@@ -54,10 +59,10 @@ public class Apexea extends Plugin
 	private CombatBot combatBot;
 	private FletchingBot fletchingBot;
 	private FiremakingBot firemakingBot;
-	private TearsOfGuthixBot togBot;
+	private HunterBot hunterBot;
 
 	@Override
-	protected void startUp() {
+	protected void startUp() throws IOException {
 		objectScanner = new ObjectScanner(client, config);
 		eventBus.register(objectScanner);
 		antiBotDetector = new AntiBotDetector(client);
@@ -72,11 +77,12 @@ public class Apexea extends Plugin
 		eventBus.register(firemakingBot);
 		fletchingBot = new FletchingBot(client, config, objectScanner);
 		eventBus.register(fletchingBot);
-		togBot = new TearsOfGuthixBot(client, config, objectScanner);
-		eventBus.register(togBot);
+		hunterBot = new HunterBot(client, config, objectScanner);
+		eventBus.register(hunterBot);
 
 		overlayManager.add(clickIndicatorOverlay);
 		GameFunctions.init(client);
+		TestFunctions.init(client);
 		resetConfigurations();
 	}
 
@@ -90,20 +96,19 @@ public class Apexea extends Plugin
 		eventBus.unregister(combatBot);
 		eventBus.unregister(firemakingBot);
 		eventBus.unregister(fletchingBot);
-		eventBus.unregister(togBot);
+		hunterBot.stop();
+		eventBus.unregister(hunterBot);
 
 		overlayManager.remove(clickIndicatorOverlay);
 		ClickTracker.clear();
 		GameFunctions.destroy();
+		TestFunctions.destroy();
 		resetConfigurations();
 	}
 
 	@Subscribe
 	public void onConfigChanged(ConfigChanged event) {
 		if (!CONFIG_GROUP.equals(event.getGroup())) {
-			return;
-		}
-		if (!BOT_KEYS.contains(event.getKey())) {
 			return;
 		}
 		if (!Boolean.parseBoolean(event.getNewValue())) {
@@ -131,21 +136,44 @@ public class Apexea extends Plugin
 		}
 		if ("botFiremaking".equals(event.getKey())
 				&& Boolean.parseBoolean(event.getNewValue())) {
-			thievingBot.start();
+			firemakingBot.start();
 		}
 		if ("botFletching".equals(event.getKey())
 				&& Boolean.parseBoolean(event.getNewValue())) {
 			fletchingBot.start();
 		}
-		if ("botTOG".equals(event.getKey())
+		if ("botHunter".equals(event.getKey())
 				&& Boolean.parseBoolean(event.getNewValue())) {
-			togBot.start();
+			hunterBot.start();
+		}
+		if (event.getKey().equals("funcTesting") && config.funcTesting()) {
+			TestFunctions.logInventoryItems();
+		}
+
+		if (event.getKey().equals("funcTesting2") && config.funcTesting2()) {
+			TestFunctions.logInventoryItems2();
 		}
 	}
 
 	@Subscribe
 	public void onGameTick(GameTick event) {
 		ClickTracker.clear();
+	}
+
+	@Subscribe
+	private void onMenuOpened(MenuOpened event)
+	{
+		for (MenuEntry entry : event.getMenuEntries())
+		{
+			log.info("option={}, target={}, action={}, id={}, itemId={}, p0={}, p1={}",
+					entry.getOption(),
+					entry.getTarget(),
+					entry.getType(),
+					entry.getIdentifier(),
+					entry.getItemId(),
+					entry.getParam0(),
+					entry.getParam1());
+		}
 	}
 
 	private void sendConflictMessage(String attempted, String alreadyRunning) {
@@ -165,6 +193,7 @@ public class Apexea extends Plugin
 		configManager.setConfiguration(CONFIG_GROUP, "botCombat", "false");
 		configManager.setConfiguration(CONFIG_GROUP, "botFiremaking", "false");
 		configManager.setConfiguration(CONFIG_GROUP, "botFletching", "false");
+		configManager.setConfiguration(CONFIG_GROUP, "botHunter", "false");
 		configManager.setConfiguration(CONFIG_GROUP, "targetName", "");
 	}
 
