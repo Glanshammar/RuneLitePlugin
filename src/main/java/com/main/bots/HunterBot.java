@@ -20,33 +20,21 @@ import java.util.Set;
 
 @Slf4j
 public class HunterBot {
-
-    // --- Red Salamander object IDs ---
-    private static final int YOUNG_TREE                 = 8990;
-    private static final int SALAMANDER_TRAP_WAITING    = 8992;  // don't click
-    private static final int SALAMANDER_TRAP_FAILED     = 62525;
-    private static final int SALAMANDER_TRAP_SUCCESS    = 8986;
-
-    // --- Red Salamander item IDs ---
-    private static final int RED_SALAMANDER_ITEM        = 10147;
-    private static final int SMALL_NET                  = 954;
-    private static final int ROPE                       = 303;
-
     // --- Chinchompa box trap object IDs ---
     private static final int BOX_TRAP_WAITING           = 9380;  // don't click
     private static final int BOX_TRAP_FAILED            = 9385;
     private static final int BOX_TRAP_SUCCESS           = 9384;
     private static final int BOX_TRAP_ANIMATION   = 5212;
 
-    // --- Priority trap spots for salamanders (worldX, worldY) ---
-    private static final List<int[]> SALAMANDER_TRAP_SPOTS = List.of(
-            new int[]{2449, 3228},
-            new int[]{2451, 3225},
-            new int[]{2447, 3225}
-    );
+    private static final Set<Integer> BOX_TRAP_IDS = Set.of(
+            BOX_TRAP_WAITING, BOX_TRAP_FAILED, BOX_TRAP_SUCCESS);
+
+    // --- Chinchompa trap ownership tracking ---
+    private final Set<WorldPoint> confirmedOwnedBoxTrapTiles    = new HashSet<>();
+    private final Set<WorldPoint> confirmedNotOwnedBoxTrapTiles = new HashSet<>();
+    private WorldPoint pendingOwnerCheckTile = null;
 
     private static final Duration ACTION_COOLDOWN = Duration.ofMillis(1200);
-    private static final Duration EMPTY_COOLDOWN  = Duration.ofSeconds(3);
     private static final Duration BOX_TRAP_PLACE_TIMEOUT   = Duration.ofSeconds(10);
 
     private final Client client;
@@ -54,11 +42,11 @@ public class HunterBot {
     private final ObjectScanner objectScanner;
 
     private Instant lastActionTime = Instant.EPOCH;
-    private Instant lastEmptyTime  = Instant.EPOCH;
 
     private boolean waitingForBoxTrapPlacement = false;
     private boolean boxTrapPlacementSeen       = false;
     private Instant boxTrapWaitDeadline        = Instant.EPOCH;
+    private final Map<WorldPoint, TrackedBoxTrap> trackedBoxTraps = new HashMap<>();
 
     public HunterBot(Client client, ApexeaConfig config, ObjectScanner objectScanner) {
         this.client = client;
@@ -69,15 +57,14 @@ public class HunterBot {
     public void start() {
         log.info("Hunter bot starting.");
         lastActionTime = Instant.EPOCH;
-        lastEmptyTime  = Instant.EPOCH;
         waitingForBoxTrapPlacement = false;
         boxTrapPlacementSeen       = false;
         boxTrapWaitDeadline        = Instant.EPOCH;
+        trackedBoxTraps.clear();
+        confirmedOwnedBoxTrapTiles.clear();
+        confirmedNotOwnedBoxTrapTiles.clear();
+        pendingOwnerCheckTile = null;
         objectScanner.addObjectIds(Set.of(
-                YOUNG_TREE,
-                SALAMANDER_TRAP_WAITING,
-                SALAMANDER_TRAP_FAILED,
-                SALAMANDER_TRAP_SUCCESS,
                 BOX_TRAP_WAITING,
                 BOX_TRAP_FAILED,
                 BOX_TRAP_SUCCESS
@@ -87,10 +74,13 @@ public class HunterBot {
     public void stop() {
         log.info("Hunter bot stopping.");
         lastActionTime = Instant.EPOCH;
-        lastEmptyTime  = Instant.EPOCH;
         waitingForBoxTrapPlacement = false;
         boxTrapPlacementSeen       = false;
         boxTrapWaitDeadline        = Instant.EPOCH;
+        confirmedOwnedBoxTrapTiles.clear();
+        confirmedNotOwnedBoxTrapTiles.clear();
+        pendingOwnerCheckTile = null;
+        trackedBoxTraps.clear();
     }
 
     @Subscribe
@@ -102,87 +92,14 @@ public class HunterBot {
         Player player = client.getLocalPlayer();
         if (player == null) return;
 
+
+        updateBoxTrapTracking();
         if (Instant.now().isBefore(lastActionTime.plus(ACTION_COOLDOWN))) return;
-
-        ApexeaConfig.HunterScript script = config.botHunterScript();
-        if (script == ApexeaConfig.HunterScript.SALAMANDERS) {
-            tickSalamanders(player);
-        } else if (script == ApexeaConfig.HunterScript.CHINCHOMPAS) {
-            tickChinchompas(player);
-        }
+        tickChinchompas(player);
     }
 
-    // ============================================================
-    //  RED SALAMANDERS
-    // ============================================================
-    private void tickSalamanders(Player player) {
-        // 1. ::empty check — 20+ salamanders AND no net AND no rope
-        int salamanders = GameFunctions.countItem(RED_SALAMANDER_ITEM);
-        int nets        = GameFunctions.countItem(SMALL_NET);
-        int ropes       = GameFunctions.countItem(ROPE);
 
-        if (salamanders >= 20 && nets == 0 && ropes == 0) {
-            if (Instant.now().isAfter(lastEmptyTime.plus(EMPTY_COOLDOWN))) {
-                log.info("Emptying inventory ({} salamanders, 0 net, 0 rope).", salamanders);
-                GameFunctions.sendCommand("::empty");
-                lastEmptyTime = Instant.now();
-            }
-            return;
-        }
-
-        // 2. Priority: reset failed / successful traps
-        ObjectScanner.Target resetTarget = findNearestOf(
-                Set.of(SALAMANDER_TRAP_FAILED, SALAMANDER_TRAP_SUCCESS));
-        if (resetTarget != null) {
-            log.info("Resetting salamander trap at {}", resetTarget.getWorldPosition());
-            doClick(resetTarget.getGameObject());
-            return;
-        }
-
-        // 3. Count active traps (waiting + failed + success)
-        int plane = player.getWorldLocation().getPlane();
-        Set<WorldPoint> activeTrapPositions = new HashSet<>();
-        for (ObjectScanner.Target t : objectScanner.findGameObjects(
-                Set.of(SALAMANDER_TRAP_WAITING,
-                        SALAMANDER_TRAP_FAILED,
-                        SALAMANDER_TRAP_SUCCESS))) {
-            if (t.getWorldPosition() != null) {
-                activeTrapPositions.add(t.getWorldPosition());
-            }
-        }
-
-        if (activeTrapPositions.size() >= SALAMANDER_TRAP_SPOTS.size()) {
-            log.debug("All {} trap slots are active; nothing to set.", activeTrapPositions.size());
-            return;
-        }
-
-        // 4. Set a trap on a young tree at a priority spot without an active trap
-        Map<WorldPoint, ObjectScanner.Target> treesByPos = new HashMap<>();
-        for (ObjectScanner.Target t : objectScanner.findGameObjects(Set.of(YOUNG_TREE))) {
-            WorldPoint wp = t.getWorldPosition();
-            if (wp != null && wp.getPlane() == plane) {
-                treesByPos.put(wp, t);
-            }
-        }
-
-        for (int[] pos : SALAMANDER_TRAP_SPOTS) {
-            WorldPoint wp = new WorldPoint(pos[0], pos[1], plane);
-            if (activeTrapPositions.contains(wp)) continue;
-            ObjectScanner.Target tree = treesByPos.get(wp);
-            if (tree != null && tree.getGameObject() != null) {
-                log.info("Setting salamander trap on young tree at {}", wp);
-                doClick(tree.getGameObject());
-                return;
-            }
-        }
-    }
-
-    // ============================================================
-    //  RED CHINCHOMPAS
-    // ============================================================
     private void tickChinchompas(Player player) {
-        // If we clicked a box trap, wait for it to finish being re-set up
-        // (player plays the placement animation 5212, then returns to -1).
         if (waitingForBoxTrapPlacement) {
             int anim = player.getAnimation();
 
@@ -209,15 +126,70 @@ public class HunterBot {
             return;
         }
 
-        ObjectScanner.Target resetTarget = findNearestOf(
-                Set.of(BOX_TRAP_FAILED, BOX_TRAP_SUCCESS));
-        if (resetTarget != null) {
-            log.info("Resetting box trap at {}", resetTarget.getWorldPosition());
-            doClick(resetTarget.getGameObject());
+        ObjectScanner.Target oldest = null;
+        Instant oldestSeen = Instant.MAX;
 
-            waitingForBoxTrapPlacement = true;
-            boxTrapPlacementSeen       = false;
-            boxTrapWaitDeadline        = Instant.now().plus(BOX_TRAP_PLACE_TIMEOUT);
+        for (ObjectScanner.Target t : objectScanner.findGameObjects(
+                Set.of(BOX_TRAP_FAILED, BOX_TRAP_SUCCESS))) {
+
+            if (t.getGameObject() == null) continue;
+
+            WorldPoint wp = t.getWorldPosition();
+            if (wp == null) continue;
+
+            TrackedBoxTrap tracked = trackedBoxTraps.get(wp);
+            Instant seen = (tracked != null) ? tracked.firstSeen : Instant.now();
+
+            if (seen.isBefore(oldestSeen)) {
+                oldestSeen = seen;
+                oldest     = t;
+            }
+        }
+
+        if (oldest == null) {
+            return;
+        }
+
+        log.info("Resetting box trap at {} (state age {} ms)",
+                oldest.getWorldPosition(),
+                Duration.between(oldestSeen, Instant.now()).toMillis());
+
+        doClick(oldest.getGameObject());
+
+        waitingForBoxTrapPlacement = true;
+        boxTrapPlacementSeen       = false;
+        boxTrapWaitDeadline        = Instant.now().plus(BOX_TRAP_PLACE_TIMEOUT);
+    }
+
+    // ============================================================
+    //  Chinchompa trap-age tracking
+    // ============================================================
+    private void updateBoxTrapTracking() {
+        List<ObjectScanner.Target> visible =
+                objectScanner.findGameObjects(BOX_TRAP_IDS);
+
+        // Build a quick view of what we can currently see.
+        Map<WorldPoint, Integer> visibleIds = new HashMap<>();
+        for (ObjectScanner.Target t : visible) {
+            WorldPoint wp = t.getWorldPosition();
+            if (wp == null) continue;
+            visibleIds.put(wp, t.getId());
+        }
+
+        // Drop entries for traps that are no longer on-screen (picked up,
+        // despawned, or out of render distance).
+        trackedBoxTraps.keySet().retainAll(visibleIds.keySet());
+
+        // Add new traps / reset age when a trap's object ID changed.
+        Instant now = Instant.now();
+        for (Map.Entry<WorldPoint, Integer> e : visibleIds.entrySet()) {
+            WorldPoint wp    = e.getKey();
+            int        newId = e.getValue();
+            TrackedBoxTrap existing = trackedBoxTraps.get(wp);
+
+            if (existing == null || existing.objectId != newId) {
+                trackedBoxTraps.put(wp, new TrackedBoxTrap(newId, now));
+            }
         }
     }
 
@@ -230,7 +202,13 @@ public class HunterBot {
         lastActionTime = Instant.now();
     }
 
-    private ObjectScanner.Target findNearestOf(Set<Integer> ids) {
-        return objectScanner.findGameObjects(ids).stream().findFirst().orElse(null);
+    private static class TrackedBoxTrap {
+        final int objectId;
+        final Instant firstSeen;
+
+        TrackedBoxTrap(int objectId, Instant firstSeen) {
+            this.objectId = objectId;
+            this.firstSeen = firstSeen;
+        }
     }
 }
