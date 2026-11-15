@@ -102,14 +102,6 @@ public interface ApexeaConfig extends Config
     )
     default boolean botHunter() { return false; }
 
-    @ConfigItem(
-            keyName = "hunterScript",
-            name = "Hunter Script",
-            description = "Hunter script. Pick one before enabling the Hunter bot.",
-            section = sectionBots,
-            position = 7)
-    default HunterScript botHunterScript() { return HunterScript.SALAMANDERS; }
-
     @ConfigSection(
             name = "Combat",
             description = "",
@@ -151,10 +143,5 @@ public interface ApexeaConfig extends Config
 
     enum MiniBots{
         SELL_THIEVE
-    }
-
-    enum HunterScript{
-        SALAMANDERS,
-        CHINCHOMPAS
     }
 }
