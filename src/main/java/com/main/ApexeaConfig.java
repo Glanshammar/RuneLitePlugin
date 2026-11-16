@@ -102,6 +102,15 @@ public interface ApexeaConfig extends Config
     )
     default boolean botHunter() { return false; }
 
+    @ConfigItem(
+            keyName = "botCrafting",
+            name = "Crafting",
+            description = "Runs the Crafting bot",
+            section = sectionBots,
+            position = 7
+    )
+    default boolean botCrafting() { return false; }
+
     @ConfigSection(
             name = "Combat",
             description = "",

@@ -64,11 +64,6 @@ public class HunterBot {
         confirmedOwnedBoxTrapTiles.clear();
         confirmedNotOwnedBoxTrapTiles.clear();
         pendingOwnerCheckTile = null;
-        objectScanner.addObjectIds(Set.of(
-                BOX_TRAP_WAITING,
-                BOX_TRAP_FAILED,
-                BOX_TRAP_SUCCESS
-        ));
     }
 
     public void stop() {
@@ -86,7 +81,6 @@ public class HunterBot {
     @Subscribe
     public void onGameTick(GameTick event) {
         if (client.getGameState() != GameState.LOGGED_IN) return;
-        if (AntiBotDetector.isDetected()) return;
         if (!config.botHunter()) return;
 
         Player player = client.getLocalPlayer();
@@ -113,12 +107,24 @@ public class HunterBot {
 
             if (boxTrapPlacementSeen && anim == -1) {
                 log.debug("Box trap re-setup complete; ready to click next.");
+                if (pendingOwnerCheckTile != null) {
+                    confirmedOwnedBoxTrapTiles.add(pendingOwnerCheckTile);
+                    confirmedNotOwnedBoxTrapTiles.remove(pendingOwnerCheckTile);
+                    pendingOwnerCheckTile = null;
+                }
                 waitingForBoxTrapPlacement = false;
                 boxTrapPlacementSeen       = false;
                 return;
             }
 
             if (Instant.now().isAfter(boxTrapWaitDeadline)) {
+                if (pendingOwnerCheckTile != null) {
+                    log.warn("No 5212 animation at {} — marking trap as not owned.",
+                            pendingOwnerCheckTile);
+                    confirmedNotOwnedBoxTrapTiles.add(pendingOwnerCheckTile);
+                    confirmedOwnedBoxTrapTiles.remove(pendingOwnerCheckTile);
+                    pendingOwnerCheckTile = null;
+                }
                 log.warn("Box trap setup animation never completed; resuming.");
                 waitingForBoxTrapPlacement = false;
                 boxTrapPlacementSeen       = false;
@@ -136,6 +142,7 @@ public class HunterBot {
 
             WorldPoint wp = t.getWorldPosition();
             if (wp == null) continue;
+            if (confirmedNotOwnedBoxTrapTiles.contains(wp)) continue;
 
             TrackedBoxTrap tracked = trackedBoxTraps.get(wp);
             Instant seen = (tracked != null) ? tracked.firstSeen : Instant.now();
@@ -156,6 +163,7 @@ public class HunterBot {
 
         doClick(oldest.getGameObject());
 
+        pendingOwnerCheckTile      = oldest.getWorldPosition();
         waitingForBoxTrapPlacement = true;
         boxTrapPlacementSeen       = false;
         boxTrapWaitDeadline        = Instant.now().plus(BOX_TRAP_PLACE_TIMEOUT);

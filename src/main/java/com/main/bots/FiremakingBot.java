@@ -9,20 +9,22 @@ import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.GameTick;
 import net.runelite.client.eventbus.Subscribe;
 
+import java.awt.event.MouseEvent;
 import java.util.List;
 import java.util.Set;
 
 
 public class FiremakingBot {
-    private enum State { IDLE, FIREMAKING, BANKING }
+    private enum State { IDLE, FIREMAKING, CLICK_NOTED_LOGS, CLICK_BANK, CLICK_FIRE }
     private static final int BANK_X = 3253;
     private static final int BANK_Y = 3419;
     private static final int BANK_CHEST = ObjectID.BANK_BOOTH_10583;
     private static final int FIRE = ObjectID.FORESTERS_CAMPFIRE;
+    private static final int MAGIC_LOGS = 1513;
+    private static final int NOTED_LOGS = 1514;
     private final Client client;
     private final ApexeaConfig config;
     private final ObjectScanner objectScanner;
-    private int notedLogsSlot;
     private ObjectScanner.Target bankTarget;
     private State state;
 
@@ -34,8 +36,11 @@ public class FiremakingBot {
     }
 
     public void start(){
-        this.notedLogsSlot = GameFunctions.findSlotWithItem(1514); //Noted Magic logs
         this.bankTarget = findBank(client.getLocalPlayer());
+    }
+
+    public void stop(){
+        this.bankTarget = null;
     }
 
     @Subscribe
@@ -50,13 +55,21 @@ public class FiremakingBot {
         if (player == null) return;
 
         switch (state) {
-            case IDLE:             tickIdle(); break;
-            case FIREMAKING:         tickFiremaking(); break;
-            case BANKING:          tickBanking(); break;
+            case IDLE:
+                tickIdle(); break;
+            case FIREMAKING: case CLICK_FIRE:
+                tickFiremaking(); break;
+            case CLICK_NOTED_LOGS:
+            case CLICK_BANK:
+                tickBanking(); break;
         }
     }
 
     private void tickIdle(){
+        if (GameFunctions.countItem(MAGIC_LOGS) == 0){
+            state = State.CLICK_NOTED_LOGS;
+            return;
+        }
         List<ObjectScanner.Target> fireList = objectScanner.findGameObjects(Set.of(FIRE));
         if (fireList.isEmpty()) return;
         GameFunctions.clickObject(fireList.get(0).getGameObject());
@@ -65,13 +78,20 @@ public class FiremakingBot {
 
     private void tickFiremaking(){
         if (GameFunctions.countItem(1513) == 0)
-            state = State.BANKING;
+            state = State.CLICK_NOTED_LOGS;
     }
 
     private void tickBanking(){
-        GameFunctions.clickInventorySlot(this.notedLogsSlot);
-        GameFunctions.clickObject(this.bankTarget.getGameObject());
-        state = State.IDLE;
+        if (state.equals(State.CLICK_NOTED_LOGS)){
+            GameFunctions.clickInventoryItem(NOTED_LOGS);
+            state = State.CLICK_BANK;
+            return;
+        }
+
+        if (state.equals(State.CLICK_BANK)){
+            GameFunctions.clickObject(this.bankTarget.getGameObject());
+            state = State.CLICK_FIRE;
+        }
     }
 
     private ObjectScanner.Target findBank(Player player) {

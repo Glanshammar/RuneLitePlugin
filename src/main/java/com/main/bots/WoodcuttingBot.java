@@ -41,19 +41,11 @@ public class WoodcuttingBot {
     private static final int BANK_CHEST = ObjectID.BANK_CHEST_14886;
     private static final int MAGIC_TREE = ObjectID.MAGIC_TREE_10834;
 
-    private static final Set<Integer> WC_ANIMATIONS = Set.of(
-            AnimationID.WOODCUTTING_BRONZE, AnimationID.WOODCUTTING_IRON,
-            AnimationID.WOODCUTTING_STEEL, AnimationID.WOODCUTTING_BLACK,
-            AnimationID.WOODCUTTING_MITHRIL, AnimationID.WOODCUTTING_RUNE,
-            AnimationID.WOODCUTTING_DRAGON
-    );
-
     private final Client client;
     private final ApexeaConfig config;
     private final ObjectScanner objectScanner;
 
     private State state = State.IDLE;
-    private Instant lastActionAt = Instant.EPOCH;
 
     // chop tracking
     private boolean choppingStarted = false;
@@ -73,7 +65,6 @@ public class WoodcuttingBot {
     public void start() {
         log.info("Woodcutting bot starting.");
         state = State.IDLE;
-        lastActionAt = Instant.EPOCH;
         choppingStarted = false;
         depositClicked = false;
         objectScanner.addObjectIds(Set.of(BANK_CHEST, MAGIC_TREE));
@@ -193,7 +184,6 @@ public class WoodcuttingBot {
             if (!depositClicked) {
                 log.info("Depositing inventory.");
                 GameFunctions.depositInventory();
-                lastActionAt = Instant.now();
                 depositClicked = true;
             }
             return;
@@ -211,7 +201,6 @@ public class WoodcuttingBot {
     private void setState(State s) {
         if (state != s) log.debug("State: {} -> {}", state, s);
         state = s;
-        lastActionAt = Instant.now();
     }
 
     private ObjectScanner.Target pickPriorityTree(Player player) {
@@ -243,6 +232,6 @@ public class WoodcuttingBot {
     }
 
     public boolean isPlayerWoodcutting(Player player) {
-        return player != null && WC_ANIMATIONS.contains(player.getAnimation());
+        return player != null && player.getAnimation() == AnimationID.WOODCUTTING_DRAGON;
     }
 }

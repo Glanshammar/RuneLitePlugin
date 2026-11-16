@@ -2,10 +2,13 @@ package com.main.bots;
 
 import com.main.ApexeaConfig;
 import com.main.utils.ObjectScanner;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.api.Player;
 import net.runelite.api.events.GameTick;
 import net.runelite.client.eventbus.Subscribe;
 
+@Slf4j
 public class TemplateBot {
     private enum State { IDLE, BANKING, SKILLING }
     private State state;
@@ -36,15 +39,25 @@ public class TemplateBot {
         }
         if (!running) return;
 
-        if (state.equals(State.IDLE)) tickFunctionOne();
-        if (state.equals(State.SKILLING)) tickFunctionTwo();
+        Player player = client.getLocalPlayer();
+
+        switch (state)
+        {
+            case IDLE:            tickIdle(player);           break;
+            case SKILLING:        tickSkilling(player);       break;
+            case BANKING:         tickBanking(player);              break;
+        }
     }
 
-    private void tickFunctionOne(){
-
+    private void tickIdle(Player player){
+        log.info("State = IDLE");
     }
 
-    private void tickFunctionTwo(){
+    private void tickSkilling(Player player){
+        log.info("State = SKILLING");
+    }
 
+    private void tickBanking(Player player){
+        log.info("State = BANKING");
     }
 }

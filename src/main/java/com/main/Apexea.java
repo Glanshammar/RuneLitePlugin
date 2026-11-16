@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.MenuEntry;
+import net.runelite.api.Point;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.MenuOpened;
 import net.runelite.client.callback.ClientThread;
@@ -17,6 +18,8 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
+import net.runelite.client.input.KeyListener;
+import net.runelite.client.input.KeyManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDependency;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -24,6 +27,7 @@ import net.runelite.client.plugins.slayer.SlayerPlugin;
 import net.runelite.client.plugins.slayer.SlayerPluginService;
 import net.runelite.client.ui.overlay.OverlayManager;
 
+import java.awt.event.KeyEvent;
 import java.io.IOException;
 import java.util.List;
 
@@ -42,7 +46,7 @@ public class Apexea extends Plugin
 			"botFiremaking",
 			"botFletching",
 			"botHunter",
-			"botTOG"
+			"botCrafting"
 	);
 	@Inject private ApexeaConfig config;
 	@Inject private ConfigManager configManager;
@@ -52,6 +56,7 @@ public class Apexea extends Plugin
 	@Inject private SlayerPluginService slayerService;
 	@Inject private OverlayManager overlayManager;
 	@Inject private ClickIndicatorOverlay clickIndicatorOverlay;
+	@Inject private KeyManager keyManager;
 	private ObjectScanner objectScanner;
 	private AntiBotDetector antiBotDetector;
 	private WoodcuttingBot woodcuttingBot;
@@ -60,6 +65,32 @@ public class Apexea extends Plugin
 	private FletchingBot fletchingBot;
 	private FiremakingBot firemakingBot;
 	private HunterBot hunterBot;
+	private MiniBots miniBots;
+	private CraftingBot craftingBot;
+
+	private final KeyListener keyListener = new KeyListener()
+	{
+		@Override
+		public void keyPressed(KeyEvent e)
+		{
+			if (e.getKeyCode() == KeyEvent.VK_SHIFT
+					&& e.getKeyLocation() == KeyEvent.KEY_LOCATION_RIGHT)
+			{
+				Point pos = client.getMouseCanvasPosition();
+				log.info("Mouse canvas position: ({}, {})", pos.getX(), pos.getY());
+			}
+		}
+
+		@Override
+		public void keyReleased(KeyEvent e)
+		{
+		}
+
+		@Override
+		public void keyTyped(KeyEvent e)
+		{
+		}
+	};
 
 	@Override
 	protected void startUp() throws IOException {
@@ -79,11 +110,16 @@ public class Apexea extends Plugin
 		eventBus.register(fletchingBot);
 		hunterBot = new HunterBot(client, config, objectScanner);
 		eventBus.register(hunterBot);
+		miniBots = new MiniBots(client, config, objectScanner);
+		eventBus.register(miniBots);
+		craftingBot = new CraftingBot(client, config, objectScanner);
+		eventBus.register(craftingBot);
 
 		overlayManager.add(clickIndicatorOverlay);
 		GameFunctions.init(client);
 		TestFunctions.init(client);
 		resetConfigurations();
+		keyManager.registerKeyListener(keyListener);
 	}
 
 	@Override
@@ -98,12 +134,17 @@ public class Apexea extends Plugin
 		eventBus.unregister(fletchingBot);
 		hunterBot.stop();
 		eventBus.unregister(hunterBot);
+		miniBots.stop();
+		eventBus.unregister(miniBots);
+		craftingBot.stop();
+		eventBus.unregister(craftingBot);
 
 		overlayManager.remove(clickIndicatorOverlay);
 		ClickTracker.clear();
 		GameFunctions.destroy();
 		TestFunctions.destroy();
 		resetConfigurations();
+		keyManager.unregisterKeyListener(keyListener);
 	}
 
 	@Subscribe
@@ -145,6 +186,10 @@ public class Apexea extends Plugin
 		if ("botHunter".equals(event.getKey())
 				&& Boolean.parseBoolean(event.getNewValue())) {
 			hunterBot.start();
+		}
+		if ("botCrafting".equals(event.getKey())
+				&& Boolean.parseBoolean(event.getNewValue())) {
+			craftingBot.start();
 		}
 		if (event.getKey().equals("funcTesting") && config.funcTesting()) {
 			TestFunctions.logInventoryItems();
@@ -194,6 +239,7 @@ public class Apexea extends Plugin
 		configManager.setConfiguration(CONFIG_GROUP, "botFiremaking", "false");
 		configManager.setConfiguration(CONFIG_GROUP, "botFletching", "false");
 		configManager.setConfiguration(CONFIG_GROUP, "botHunter", "false");
+		configManager.setConfiguration(CONFIG_GROUP, "botCrafting", "false");
 		configManager.setConfiguration(CONFIG_GROUP, "targetName", "");
 	}
 
