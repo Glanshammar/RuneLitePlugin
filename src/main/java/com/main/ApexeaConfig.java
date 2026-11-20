@@ -86,12 +86,12 @@ public interface ApexeaConfig extends Config
     default boolean botMinis() { return false; }
 
     @ConfigItem(
-            keyName = "miniBotsScript",
-            name = "Minibot Script",
-            description = "Minibot script. Pick one before enabling the combat bot.",
+            keyName = "scriptMinis",
+            name = "Mini Script",
+            description = "Mini script. Pick one before enabling the combat bot.",
             section = sectionBots,
             position = 5)
-    default MiniBots botMiniScript() { return MiniBots.SELL_THIEVE; }
+    default MiniScripts scriptMinis() { return MiniScripts.SELL_THIEVE; }
 
     @ConfigItem(
             keyName = "botHunter",
@@ -110,6 +110,38 @@ public interface ApexeaConfig extends Config
             position = 7
     )
     default boolean botCrafting() { return false; }
+
+    @ConfigItem(
+            keyName = "scriptCrafting",
+            name = "Crafting Script",
+            description = "Minibot script. Pick one before enabling the combat bot.",
+            section = sectionBots,
+            position = 8)
+    default CraftingScript scriptCrafting() { return CraftingScript.CRAFT_RUBIES; }
+
+    @ConfigItem(
+            keyName = "botMining",
+            name = "Mining",
+            description = "Runite mining bot.",
+            section = sectionBots,
+            position = 9)
+    default boolean botMining() { return false; }
+
+    @ConfigItem(
+            keyName = "scriptMining",
+            name = "Crafting Script",
+            description = "Minibot script. Pick one before enabling the combat bot.",
+            section = sectionBots,
+            position = 10)
+    default MiningScript scriptMining() { return MiningScript.POWER_MINE; }
+
+    @ConfigItem(
+            keyName = "botTithe",
+            name = "Tithe Farm",
+            description = "Tithe farm bot",
+            section = sectionBots,
+            position = 11)
+    default boolean botTithe() { return false; }
 
     @ConfigSection(
             name = "Combat",
@@ -144,13 +176,27 @@ public interface ApexeaConfig extends Config
             position = 2)
     default String botTargetName() { return ""; }
 
-    enum CombatScript{
+    enum CombatScript {
         NEAREST,
         GEMSTONE_CRAB,
         SLAYER,
     }
 
-    enum MiniBots{
+    enum MiniScripts {
         SELL_THIEVE
+    }
+
+    enum CraftingScript {
+        CRAFT_RUBIES,
+        CRAFT_RINGS
+    }
+
+    enum MiningScript {
+        AMETHYST_SOUTH_1, AMETHYST_SOUTH_2, AMETHYST_WEST_1, AMETHYST_WEST_2,
+        POWER_MINE, RUNITE;
+
+        public boolean isAmethyst() {
+            return this.name().startsWith("AMETHYST");
+        }
     }
 }

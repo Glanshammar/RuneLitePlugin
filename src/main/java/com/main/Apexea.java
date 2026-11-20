@@ -7,10 +7,7 @@ import com.main.bots.*;
 import com.main.utils.*;
 import com.main.tests.*;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.ChatMessageType;
-import net.runelite.api.Client;
-import net.runelite.api.MenuEntry;
-import net.runelite.api.Point;
+import net.runelite.api.*;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.MenuOpened;
 import net.runelite.client.callback.ClientThread;
@@ -18,6 +15,7 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
+import net.runelite.client.game.ItemManager;
 import net.runelite.client.input.KeyListener;
 import net.runelite.client.input.KeyManager;
 import net.runelite.client.plugins.Plugin;
@@ -46,8 +44,10 @@ public class Apexea extends Plugin
 			"botFiremaking",
 			"botFletching",
 			"botHunter",
-			"botCrafting"
+			"botCrafting",
+			"botMining"
 	);
+
 	@Inject private ApexeaConfig config;
 	@Inject private ConfigManager configManager;
 	@Inject private Client client;
@@ -57,7 +57,7 @@ public class Apexea extends Plugin
 	@Inject private OverlayManager overlayManager;
 	@Inject private ClickIndicatorOverlay clickIndicatorOverlay;
 	@Inject private KeyManager keyManager;
-	private ObjectScanner objectScanner;
+	@Inject private ItemManager itemManager;
 	private AntiBotDetector antiBotDetector;
 	private WoodcuttingBot woodcuttingBot;
 	private ThievingBot thievingBot;
@@ -67,6 +67,8 @@ public class Apexea extends Plugin
 	private HunterBot hunterBot;
 	private MiniBots miniBots;
 	private CraftingBot craftingBot;
+	private MiningBot miningBot;
+	private TitheFarmBot titheBot;
 
 	private final KeyListener keyListener = new KeyListener()
 	{
@@ -84,6 +86,7 @@ public class Apexea extends Plugin
 		@Override
 		public void keyReleased(KeyEvent e)
 		{
+			if (e.getKeyCode() == KeyEvent.VK_1){ miniBots.isShopOpen = true; }
 		}
 
 		@Override
@@ -94,29 +97,32 @@ public class Apexea extends Plugin
 
 	@Override
 	protected void startUp() throws IOException {
-		objectScanner = new ObjectScanner(client, config);
-		eventBus.register(objectScanner);
 		antiBotDetector = new AntiBotDetector(client);
 		eventBus.register(antiBotDetector);
-		woodcuttingBot = new WoodcuttingBot(client, config, objectScanner);
+		woodcuttingBot = new WoodcuttingBot(client, config);
 		eventBus.register(woodcuttingBot);
-		thievingBot = new ThievingBot(client, config, objectScanner);
+		thievingBot = new ThievingBot(client, config);
 		eventBus.register(thievingBot);
-		combatBot = new CombatBot(client, config, objectScanner, slayerService);
+		combatBot = new CombatBot(client, config, slayerService);
 		eventBus.register(combatBot);
-		firemakingBot = new FiremakingBot(client, config, objectScanner);
+		firemakingBot = new FiremakingBot(client, config);
 		eventBus.register(firemakingBot);
-		fletchingBot = new FletchingBot(client, config, objectScanner);
+		fletchingBot = new FletchingBot(client, config);
 		eventBus.register(fletchingBot);
-		hunterBot = new HunterBot(client, config, objectScanner);
+		hunterBot = new HunterBot(client, config);
 		eventBus.register(hunterBot);
-		miniBots = new MiniBots(client, config, objectScanner);
+		miniBots = new MiniBots(client, config);
 		eventBus.register(miniBots);
-		craftingBot = new CraftingBot(client, config, objectScanner);
+		craftingBot = new CraftingBot(client, config);
 		eventBus.register(craftingBot);
+		miningBot = new MiningBot(client, config);
+		eventBus.register(miningBot);
+		titheBot = new TitheFarmBot(client, config);
+		eventBus.register(titheBot);
 
 		overlayManager.add(clickIndicatorOverlay);
 		GameFunctions.init(client);
+		ObjectScanner.init(client);
 		TestFunctions.init(client);
 		resetConfigurations();
 		keyManager.registerKeyListener(keyListener);
@@ -124,13 +130,16 @@ public class Apexea extends Plugin
 
 	@Override
 	protected void shutDown() {
+		eventBus.unregister(antiBotDetector);
 		woodcuttingBot.stop();
 		eventBus.unregister(woodcuttingBot);
-		eventBus.unregister(antiBotDetector);
-		eventBus.unregister(objectScanner);
+		thievingBot.stop();
 		eventBus.unregister(thievingBot);
+		combatBot.stop();
 		eventBus.unregister(combatBot);
+		firemakingBot.stop();
 		eventBus.unregister(firemakingBot);
+		fletchingBot.stop();
 		eventBus.unregister(fletchingBot);
 		hunterBot.stop();
 		eventBus.unregister(hunterBot);
@@ -138,6 +147,10 @@ public class Apexea extends Plugin
 		eventBus.unregister(miniBots);
 		craftingBot.stop();
 		eventBus.unregister(craftingBot);
+		miningBot.stop();
+		eventBus.unregister(miningBot);
+		titheBot.stop();
+		eventBus.unregister(titheBot);
 
 		overlayManager.remove(clickIndicatorOverlay);
 		ClickTracker.clear();
@@ -191,6 +204,14 @@ public class Apexea extends Plugin
 				&& Boolean.parseBoolean(event.getNewValue())) {
 			craftingBot.start();
 		}
+		if ("botMining".equals(event.getKey())
+				&& Boolean.parseBoolean(event.getNewValue())) {
+			miningBot.start();
+		}
+		if ("botTithe".equals(event.getKey())
+				&& Boolean.parseBoolean(event.getNewValue())) {
+			titheBot.start();
+		}
 		if (event.getKey().equals("funcTesting") && config.funcTesting()) {
 			TestFunctions.logInventoryItems();
 		}
@@ -240,7 +261,9 @@ public class Apexea extends Plugin
 		configManager.setConfiguration(CONFIG_GROUP, "botFletching", "false");
 		configManager.setConfiguration(CONFIG_GROUP, "botHunter", "false");
 		configManager.setConfiguration(CONFIG_GROUP, "botCrafting", "false");
-		configManager.setConfiguration(CONFIG_GROUP, "targetName", "");
+		configManager.setConfiguration(CONFIG_GROUP, "botMinis", "false");
+		configManager.setConfiguration(CONFIG_GROUP, "botMining", "false");
+		configManager.setConfiguration(CONFIG_GROUP, "botTithe", "false");
 	}
 
 	@Provides
