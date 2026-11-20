@@ -5,17 +5,11 @@ import com.main.utils.GameFunctions;
 import com.main.utils.ObjectScanner;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
-import net.runelite.api.GameObject;
 import net.runelite.api.events.GameTick;
-import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
-import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.eventbus.Subscribe;
 
-import java.awt.event.KeyEvent;
 import java.time.Duration;
-import java.util.Optional;
-import java.util.Set;
 
 @Slf4j
 public class FletchingBot {
@@ -23,16 +17,16 @@ public class FletchingBot {
     private State state;
     private final Client client;
     private final ApexeaConfig config;
-    private final ObjectScanner objectScanner;
     private final int BANK = 10355;
     private final int MAGIC_LOGS = 1513;
+    private final int MAGIC_LOGS_NOTED = 1514;
     private final int MAGIC_LONGBOW = 70;
+    private final int KNIFE = 946;
     private boolean running = false;
 
-    public FletchingBot(Client client, ApexeaConfig config, ObjectScanner objectScanner){
+    public FletchingBot(Client client, ApexeaConfig config){
         this.client = client;
         this.config = config;
-        this.objectScanner = objectScanner;
     }
 
     public void start(){
@@ -79,14 +73,14 @@ public class FletchingBot {
     private void tickFletching() {
         switch (state) {
             case CLICK_KNIFE:
-                GameFunctions.clickInventorySlot(1);          // knife
+                GameFunctions.clickInventoryItem(KNIFE);
                 state = State.CLICK_LOG;
                 GameFunctions.startTimer();
                 break;
 
             case CLICK_LOG:
                 if (GameFunctions.ifTimeWaited(Duration.ofMillis(300))) {
-                    GameFunctions.clickInventorySlot(5);      // log
+                    GameFunctions.clickInventoryItem(MAGIC_LOGS);
                     state = State.WAITING;
                 }
                 break;
@@ -113,24 +107,21 @@ public class FletchingBot {
                 break;
 
             case CLICK_BOW:
-                GameFunctions.clickInventorySlot(5);          // bows
+                GameFunctions.clickInventoryItem(MAGIC_LONGBOW);
                 state = State.CLICK_BANK;
                 GameFunctions.startTimer();
                 break;
 
             case CLICK_BANK:
-                if (!GameFunctions.ifTimeWaited(Duration.ofMillis(300))) break;
-                objectScanner.findNearestObject(Set.of(BANK)).ifPresent(GameFunctions::clickObject);
-                // Distinguish the two CLICK_BANK entry points by what's in the inventory.
+                ObjectScanner.findNearestGameObject(BANK);
                 state = GameFunctions.countItem(MAGIC_LONGBOW) > 0
                         ? State.CLICK_NOTED_LOGS
                         : State.WAITING_LOGS;
                 break;
 
             case CLICK_NOTED_LOGS:
-                // Deposit has to finish before clicking the noted logs.
                 if (GameFunctions.countItem(MAGIC_LONGBOW) == 0) {
-                    GameFunctions.clickInventorySlot(2);      // noted logs
+                    GameFunctions.clickInventoryItem(MAGIC_LOGS_NOTED);
                     state = State.CLICK_BANK;
                     GameFunctions.startTimer();
                 }

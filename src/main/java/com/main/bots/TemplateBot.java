@@ -14,20 +14,20 @@ public class TemplateBot {
     private State state;
     private final Client client;
     private final ApexeaConfig config;
-    private final ObjectScanner objectScanner;
     private boolean running = false;
 
-    public TemplateBot(Client client, ApexeaConfig config, ObjectScanner objectScanner){
+    public TemplateBot(Client client, ApexeaConfig config){
         this.client = client;
         this.config = config;
-        this.objectScanner = objectScanner;
     }
 
     public void start(){
+        log.info("Bot has started.");
         state = State.IDLE;
     }
 
     public void stop(){
+        log.info("Bot has stopped.");
     }
 
     @Subscribe
@@ -43,9 +43,15 @@ public class TemplateBot {
 
         switch (state)
         {
-            case IDLE:            tickIdle(player);           break;
-            case SKILLING:        tickSkilling(player);       break;
-            case BANKING:         tickBanking(player);              break;
+            case IDLE:
+                tickIdle(player);
+                break;
+            case SKILLING:
+                tickSkilling(player);
+                break;
+            case BANKING:
+                tickBanking(player);
+                break;
         }
     }
 

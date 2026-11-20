@@ -39,7 +39,6 @@ public class HunterBot {
 
     private final Client client;
     private final ApexeaConfig config;
-    private final ObjectScanner objectScanner;
 
     private Instant lastActionTime = Instant.EPOCH;
 
@@ -48,10 +47,9 @@ public class HunterBot {
     private Instant boxTrapWaitDeadline        = Instant.EPOCH;
     private final Map<WorldPoint, TrackedBoxTrap> trackedBoxTraps = new HashMap<>();
 
-    public HunterBot(Client client, ApexeaConfig config, ObjectScanner objectScanner) {
+    public HunterBot(Client client, ApexeaConfig config) {
         this.client = client;
         this.config = config;
-        this.objectScanner = objectScanner;
     }
 
     public void start() {
@@ -132,15 +130,13 @@ public class HunterBot {
             return;
         }
 
-        ObjectScanner.Target oldest = null;
+        GameObject oldest = null;
         Instant oldestSeen = Instant.MAX;
 
-        for (ObjectScanner.Target t : objectScanner.findGameObjects(
-                Set.of(BOX_TRAP_FAILED, BOX_TRAP_SUCCESS))) {
+        for (GameObject object : ObjectScanner.findGameObjects(Set.of(BOX_TRAP_FAILED, BOX_TRAP_SUCCESS))) {
+            if (object == null) continue;
 
-            if (t.getGameObject() == null) continue;
-
-            WorldPoint wp = t.getWorldPosition();
+            WorldPoint wp = object.getWorldLocation();
             if (wp == null) continue;
             if (confirmedNotOwnedBoxTrapTiles.contains(wp)) continue;
 
@@ -149,7 +145,7 @@ public class HunterBot {
 
             if (seen.isBefore(oldestSeen)) {
                 oldestSeen = seen;
-                oldest     = t;
+                oldest     = object;
             }
         }
 
@@ -158,12 +154,13 @@ public class HunterBot {
         }
 
         log.info("Resetting box trap at {} (state age {} ms)",
-                oldest.getWorldPosition(),
+                oldest.getWorldLocation(),
                 Duration.between(oldestSeen, Instant.now()).toMillis());
 
-        doClick(oldest.getGameObject());
+        GameFunctions.clickObject(oldest);
+        lastActionTime = Instant.now();
 
-        pendingOwnerCheckTile      = oldest.getWorldPosition();
+        pendingOwnerCheckTile      = oldest.getWorldLocation();
         waitingForBoxTrapPlacement = true;
         boxTrapPlacementSeen       = false;
         boxTrapWaitDeadline        = Instant.now().plus(BOX_TRAP_PLACE_TIMEOUT);
@@ -173,15 +170,14 @@ public class HunterBot {
     //  Chinchompa trap-age tracking
     // ============================================================
     private void updateBoxTrapTracking() {
-        List<ObjectScanner.Target> visible =
-                objectScanner.findGameObjects(BOX_TRAP_IDS);
+        List<GameObject> visible = ObjectScanner.findGameObjects(BOX_TRAP_IDS);
 
         // Build a quick view of what we can currently see.
         Map<WorldPoint, Integer> visibleIds = new HashMap<>();
-        for (ObjectScanner.Target t : visible) {
-            WorldPoint wp = t.getWorldPosition();
+        for (GameObject object : visible) {
+            WorldPoint wp = object.getWorldLocation();
             if (wp == null) continue;
-            visibleIds.put(wp, t.getId());
+            visibleIds.put(wp, object.getId());
         }
 
         // Drop entries for traps that are no longer on-screen (picked up,
@@ -204,12 +200,6 @@ public class HunterBot {
     // ============================================================
     //  Helpers
     // ============================================================
-    private void doClick(GameObject obj) {
-        if (obj == null) return;
-        GameFunctions.clickObject(obj);
-        lastActionTime = Instant.now();
-    }
-
     private static class TrackedBoxTrap {
         final int objectId;
         final Instant firstSeen;

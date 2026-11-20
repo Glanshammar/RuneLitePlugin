@@ -11,11 +11,9 @@ import net.runelite.api.events.GameTick;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.slayer.SlayerPluginService;
 
-import java.awt.event.MouseEvent;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -26,7 +24,6 @@ public class CombatBot {
     private State state;
     private final Client client;
     private final ApexeaConfig config;
-    private final ObjectScanner objectScanner;
     private final SlayerPluginService slayerPluginService;
 
     private NPC currentTarget = null;
@@ -37,10 +34,9 @@ public class CombatBot {
 
     private boolean running = false;
 
-    public CombatBot(Client client, ApexeaConfig config, ObjectScanner objectScanner, SlayerPluginService slayerPluginService) throws IOException {
+    public CombatBot(Client client, ApexeaConfig config, SlayerPluginService slayerPluginService) throws IOException {
         this.client = client;
         this.config = config;
-        this.objectScanner = objectScanner;
         this.slayerPluginService = slayerPluginService;
     }
 
@@ -78,6 +74,7 @@ public class CombatBot {
 
         if (!player.isInteracting()) state = State.IDLE;
         if (player.isInteracting()) state = State.COMBAT;
+        log.info("State: {} and is interacting: {}", state, player.isInteracting());
 
         int prayerPoints = client.getBoostedSkillLevel(Skill.PRAYER);
         if (prayerPoints <= 30)
@@ -90,30 +87,25 @@ public class CombatBot {
             return;
         }
 
+        if (currentTarget != null && currentTarget.getAnimation() == 1518){
+            NPC nearestNpc = getNearestMob(player);
+            GameFunctions.clickNpc(nearestNpc);
+            currentTarget = nearestNpc;
+        }
+
         if (config.botCombatScript() == ApexeaConfig.CombatScript.GEMSTONE_CRAB) botGemstoneCrab(player);
         if (config.botCombatScript() == ApexeaConfig.CombatScript.NEAREST && state.equals(State.IDLE)) botNearestNpc(player);
         if (config.botCombatScript() == ApexeaConfig.CombatScript.SLAYER && state.equals(State.IDLE)) botNearestNpc(player);
     }
 
-    @Subscribe
-    public void onActorDeath(ActorDeath event) {
-        if (!(event.getActor() instanceof NPC)) return;
-        NPC deadNpc = (NPC) event.getActor();
-        String npcName = deadNpc.getName();
-        if (npcName == null) return;
-
-        if ("Gemstone Crab".equals(npcName)) return;
-        if (deadNpc.getInteracting() != client.getLocalPlayer()) return;
-        if (deadNpc == currentTarget) currentTarget = null;
-    }
-
     public void botGemstoneCrab(Player player) {
         // Crab exist - attack it
         if (!state.equals(State.COMBAT)) {
-            Optional<NPC> crab = objectScanner.findNearestNpc(Set.of(14779));
-            if (crab.isPresent()) {
+            NPC crab = ObjectScanner.findNearestNpc(14779);
+            if (crab != null) {
                 log.info("Clicking Gemstone Crab");
-                GameFunctions.clickNpc(crab.get());
+                GameFunctions.clickNpc(crab);
+                currentTarget = crab;
                 state = State.ATTACKING;
             }
         }
@@ -134,10 +126,10 @@ public class CombatBot {
         if (state.equals(State.WAITING)) return;
 
         // Click the cave to travel to the next crab
-        Optional<GameObject> caveObject = objectScanner.findNearestObject(Set.of(57631));
-        if (caveObject.isPresent()) {
+        GameObject caveObject = ObjectScanner.findNearestGameObject(57631);
+        if (caveObject != null) {
             log.info("Gemstone Crab not found — clicking cave");
-            GameFunctions.clickObject(caveObject.get());
+            GameFunctions.clickObject(caveObject);
             state = State.WAITING;
         } else {
             log.debug("Neither Gemstone Crab nor cave object in scene");
@@ -150,7 +142,7 @@ public class CombatBot {
         NPC attacker = getNpcTargetingPlayer(player);
         if (attacker != null)
         {
-            currentTarget = attacker;          // override stale target
+            currentTarget = attacker;
             GameFunctions.clickNpc(attacker);
             state = State.COMBAT;
             log.info("Attacking mob. Going to COMBAT.");
@@ -167,9 +159,15 @@ public class CombatBot {
             return;
         }
 
-        currentTarget = null;
-
         // 3. Pick the nearest matching NPC.
+        NPC nearest = getNearestMob(player);
+        GameFunctions.clickNpc(nearest);
+        state = State.COMBAT;
+        currentTarget = nearest;
+        log.info("Attacking mob. Going to COMBAT.");
+    }
+
+    private NPC getNearestMob(Player player){
         Stream<NPC> stream = client.getNpcs().stream();
         if (config.botCombatScript() == ApexeaConfig.CombatScript.SLAYER) {
             stream = slayerPluginService.getTargets().stream();
@@ -188,12 +186,10 @@ public class CombatBot {
 
         if (nearest == null) {
             log.warn("No mob found.");
-            return;
+            return null;
         }
-        GameFunctions.clickNpc(nearest);
-        state = State.COMBAT;
-        currentTarget = nearest;
-        log.info("Attacking mob. Going to COMBAT.");
+
+        return nearest;
     }
 
     private void restorePrayer(){
@@ -209,27 +205,10 @@ public class CombatBot {
     }
 
     private void handlePickupDrops(Player player) {
-        // Wait for combat to finish (e.g. the death animation or an auto-retaliate target).
         if (player.isInteracting()) return;
 
-        // Combined pickup list — dropsList / alchList are already Sets of item IDs,
-        // and ObjectScanner.findNearestGroundItem takes a Set<Integer>, so no conversion needed.
         Set<Integer> allPickupIds = new HashSet<>(dropsList);
         allPickupIds.addAll(alchList);
-
-        Optional<ObjectScanner.Target> item = objectScanner.findNearestGroundItem(allPickupIds);
-        if (item.isPresent()) {
-            ObjectScanner.Target t = item.get();
-            log.info("Picking up {} at {}", t.getName(), t.getWorldPosition());
-            GameFunctions.clickGroundItem(t.getTile(), t.getTileItem());
-        } else {
-            log.info("All drops collected — returning to IDLE");
-            if (config.botCombatScript() == ApexeaConfig.CombatScript.SLAYER && slayerPluginService.getRemainingAmount() == 0) {
-                state = State.GET_NEW_TASK;   // preserve slayer-task-completion handling
-            } else {
-                state = State.IDLE;
-            }
-        }
     }
 
     private int playerHealth(Player player){ return Math.round((float) ((player.getHealthRatio() - 1) * client.getRealSkillLevel(Skill.HITPOINTS)) / (player.getHealthScale() - 1)); }

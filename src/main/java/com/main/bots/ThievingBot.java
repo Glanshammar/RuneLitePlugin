@@ -35,7 +35,6 @@ public class ThievingBot {
 
     private final Client client;
     private final ApexeaConfig config;
-    private final ObjectScanner objectScanner;
 
     private State state = State.STEALING;
     private boolean running = false;
@@ -44,10 +43,9 @@ public class ThievingBot {
     // shop tracking
     private Instant shopOpenDeadline = Instant.EPOCH;
 
-    public ThievingBot(Client client, ApexeaConfig config, ObjectScanner objectScanner){
+    public ThievingBot(Client client, ApexeaConfig config){
         this.client = client;
         this.config = config;
-        this.objectScanner = objectScanner;
     }
 
     public void start() {
@@ -105,9 +103,9 @@ public class ThievingBot {
             return;
         }
 
-        ObjectScanner.Target stall = findStall(player);
+        GameObject stall = ObjectScanner.findNearestGameObject(STALL);
         if (stall == null) return;
-        GameFunctions.clickObject(stall.getGameObject());
+        GameFunctions.clickObject(stall);
         setState(State.STEALING);
     }
 
@@ -116,12 +114,12 @@ public class ThievingBot {
     // ============================================================
     private void tickSelling() {
         if (state.equals(State.SELLING)){
-            Optional<NPC> npc = objectScanner.findNearestNpc(Set.of(ALI));
-            if (npc.isEmpty()) {
+            NPC ali = ObjectScanner.findNearestNpc(ALI);
+            if (ali == null) {
                 log.debug("Seller NPC {} not visible", ALI);
                 return;
             }
-            GameFunctions.clickNpc(npc.get());
+            GameFunctions.clickNpc(ali);
             state = State.WAITING;
             log.info("Clicked Ali");
         }
@@ -134,10 +132,7 @@ public class ThievingBot {
         }
 
         if (state.equals(State.WAITING)){
-            if (!GameFunctions.isShopOpen()) {
-                log.warn("Shop is not open.");
-                return;
-            }
+            // Wait for shop opened
 
             log.info("Shop opened.");
             GameFunctions.clickInventoryItem(ADAMANT_SCIMMY, MouseEvent.BUTTON3);
@@ -158,18 +153,5 @@ public class ThievingBot {
     private void setState(State s) {
         if (state != s) log.debug("State {} → {}", state, s);
         state = s;
-    }
-
-    private ObjectScanner.Target findStall(Player player) {
-        int plane = player.getWorldLocation().getPlane();
-        List<ObjectScanner.Target> stalls = objectScanner.findGameObjects(Set.of(STALL));
-        for (ObjectScanner.Target t : stalls) {
-            if (t.getWorldPosition() != null
-                    && t.getWorldPosition().getPlane() == plane
-                    && t.getGameObject() != null) {
-                return t;
-            }
-        }
-        return null;
     }
 }

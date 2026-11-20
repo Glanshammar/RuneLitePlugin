@@ -6,35 +6,37 @@ import com.main.utils.ObjectScanner;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameObject;
-import net.runelite.api.Player;
+import net.runelite.api.Point;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.widgets.Widget;
 import net.runelite.client.eventbus.Subscribe;
-import org.lwjgl.system.linux.Stat;
 
 import java.awt.event.KeyEvent;
-import java.util.Optional;
+import java.awt.event.MouseEvent;
 import java.util.Set;
 
 @Slf4j
 public class CraftingBot {
     private enum State { IDLE, NOTING, UNNOTING, SKILLING }
-    private enum Action { NONE, CLICK_CHISEL, CLICK_GEM, CLICK_NOTED_GEM, CLICK_BANK, START_CRAFTING }
+    private enum Action { NONE, CLICK_CHISEL, CLICK_GEM, CLICK_NOTED_GEM, CLICK_BANK, START_CRAFTING, DEPOSIT, WITHDRAW }
     private State state;
     private Action action;
     private final Client client;
     private final ApexeaConfig config;
-    private final ObjectScanner objectScanner;
     private boolean running = false;
     private int idleTicks = 0;
     private final int UNCUT_RUBY = 1619;
     private final int CUT_RUBY = 1603;
     private final int NOTED_RUBY = 1620;
     private final int CHISEL = 1755;
+    private final int GOLD_BAR = 2357;
+    private final int RUBY_RING = 1641;
+    private final Set<Integer> BANKS = Set.of(10355);
+    private final Set<Integer> FURNACE = Set.of(1);
 
-    public CraftingBot(Client client, ApexeaConfig config, ObjectScanner objectScanner){
+    public CraftingBot(Client client, ApexeaConfig config){
         this.client = client;
         this.config = config;
-        this.objectScanner = objectScanner;
     }
 
     public void start(){
@@ -58,22 +60,43 @@ public class CraftingBot {
         }
         if (!running) return;
 
-        switch (state)
-        {
-            case IDLE:
-                tickIdle();
-                break;
-            case SKILLING:
-                tickCrafting();
-                break;
-            case NOTING:
-            case UNNOTING:
-                tickBanking();
-                break;
+        if (config.scriptCrafting() == ApexeaConfig.CraftingScript.CRAFT_RUBIES){
+            switch (state)
+            {
+                case IDLE:
+                    tickIdleGems();
+                    break;
+                case SKILLING:
+                    tickCraftingGems();
+                    break;
+                case NOTING:
+                case UNNOTING:
+                    tickBankingGems();
+                    break;
+            }
+        }
+
+        if (config.scriptCrafting() == ApexeaConfig.CraftingScript.CRAFT_RINGS){
+            switch (state)
+            {
+                case IDLE:
+                    tickIdleRings();
+                    break;
+                case SKILLING:
+                    tickCraftingRings();
+                    break;
+                case NOTING:
+                case UNNOTING:
+                    tickBankingRings();
+                    break;
+            }
         }
     }
 
-    private void tickIdle(){
+    // ###########################################################################
+    // Craft Rubies
+    // ###########################################################################
+    private void tickIdleGems(){
         if (action.equals(Action.NONE) || action.equals(Action.CLICK_CHISEL)){
             GameFunctions.clickInventoryItem(CHISEL);
             action = Action.CLICK_GEM;
@@ -103,14 +126,14 @@ public class CraftingBot {
         }
     }
 
-    private void tickCrafting(){
+    private void tickCraftingGems(){
         if (GameFunctions.countItem(UNCUT_RUBY) == 0){
             state = State.NOTING;
             log.info("Waiting for crafting all the gems...");
         }
     }
 
-    private void tickBanking(){
+    private void tickBankingGems(){
         if (action.equals(Action.CLICK_GEM)){
             GameFunctions.clickInventoryItem(CUT_RUBY);
             action = Action.CLICK_BANK;
@@ -119,8 +142,8 @@ public class CraftingBot {
         }
 
         if (action.equals(Action.CLICK_BANK)){
-            Optional<GameObject> bank = objectScanner.findNearestObject(Set.of(10355));
-            GameFunctions.clickObject(bank.get());
+            GameObject bank = ObjectScanner.findNearestGameObject(BANKS, null);
+            GameFunctions.clickObject(bank);
             log.info("Clicking bank.");
             if (state.equals(State.NOTING)){
                 action = Action.CLICK_NOTED_GEM;
@@ -141,5 +164,56 @@ public class CraftingBot {
             log.info("Clicking noted gems.");
             return;
         }
+    }
+
+    // ###########################################################################
+    // Craft Ruby Rings
+    // ###########################################################################
+    private void tickIdleRings(){
+        if (state.equals(State.IDLE) && action.equals(Action.NONE)){
+            GameObject furnace = ObjectScanner.findNearestGameObject(FURNACE);
+            GameFunctions.clickObject(furnace);
+            action = Action.START_CRAFTING;
+            return;
+        }
+
+        Widget goldInterface = client.getWidget(446, 0);
+        if (action.equals(Action.START_CRAFTING) && goldInterface != null){
+            GameFunctions.click(MouseEvent.BUTTON1, 1, 1);
+            state = State.SKILLING;
+            action = Action.CLICK_BANK;
+            return;
+        }
+    }
+
+    private void tickCraftingRings(){
+        if (action.equals(Action.CLICK_BANK) && GameFunctions.countItem(RUBY_RING) == 13){
+            GameObject bank = ObjectScanner.findNearestGameObject(BANKS);
+            GameFunctions.clickObject(bank);
+            action = Action.DEPOSIT;
+            return;
+        }
+
+        if (action.equals(Action.DEPOSIT) && GameFunctions.isBankOpen()){
+            GameFunctions.clickInventoryItem(MouseEvent.BUTTON1, RUBY_RING);
+            action = Action.WITHDRAW;
+        }
+
+        if (action.equals(Action.WITHDRAW) && GameFunctions.countItem(RUBY_RING) == 0){
+            Point goldBar = GameFunctions.getBankItem(GOLD_BAR);
+            Point cutRuby = GameFunctions.getBankItem(CUT_RUBY);
+
+            assert goldBar != null;
+            assert cutRuby != null;
+            GameFunctions.click(MouseEvent.BUTTON1, goldBar.getX(), goldBar.getY());
+            GameFunctions.click(MouseEvent.BUTTON1, cutRuby.getX(), cutRuby.getY());
+
+            state = State.IDLE;
+            action = Action.START_CRAFTING;
+        }
+    }
+
+    private void tickBankingRings(){
+
     }
 }

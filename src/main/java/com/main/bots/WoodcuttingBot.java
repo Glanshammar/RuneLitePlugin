@@ -34,16 +34,11 @@ public class WoodcuttingBot {
             new int[]{2838, 2960}
     );
 
-    // --- bank chest position ---
-    private static final int BANK_X = 2852;
-    private static final int BANK_Y = 2951;
-
     private static final int BANK_CHEST = ObjectID.BANK_CHEST_14886;
     private static final int MAGIC_TREE = ObjectID.MAGIC_TREE_10834;
 
     private final Client client;
     private final ApexeaConfig config;
-    private final ObjectScanner objectScanner;
 
     private State state = State.IDLE;
 
@@ -55,11 +50,9 @@ public class WoodcuttingBot {
     private Instant bankOpenDeadline = Instant.EPOCH;
     private boolean depositClicked = false;
 
-    public WoodcuttingBot(Client client,
-                          ApexeaConfig config, ObjectScanner objectScanner) {
+    public WoodcuttingBot(Client client, ApexeaConfig config) {
         this.client = client;
         this.config = config;
-        this.objectScanner = objectScanner;
     }
 
     public void start() {
@@ -67,7 +60,6 @@ public class WoodcuttingBot {
         state = State.IDLE;
         choppingStarted = false;
         depositClicked = false;
-        objectScanner.addObjectIds(Set.of(BANK_CHEST, MAGIC_TREE));
     }
 
     public void stop() {
@@ -91,7 +83,7 @@ public class WoodcuttingBot {
         switch (state) {
             case IDLE:             tickIdle(player); break;
             case CHOPPING:         tickChopping(player); break;
-            case WALKING_TO_BANK:  tickWalkingToBank(player); break;
+            case WALKING_TO_BANK:  tickWalkingToBank(); break;
             case BANKING:          tickBanking(); break;
         }
     }
@@ -106,12 +98,12 @@ public class WoodcuttingBot {
             return;
         }
 
-        ObjectScanner.Target tree = pickPriorityTree(player);
+        GameObject tree = pickTree(player);
         if (tree == null) {
             return;
         }
 
-        GameFunctions.clickObject(tree.getGameObject());
+        GameFunctions.clickObject(tree);
 
         choppingStarted = false;
         chopStartDeadline = Instant.now().plus(CHOP_START_TIMEOUT);
@@ -147,21 +139,21 @@ public class WoodcuttingBot {
     // ============================================================
     //  WALKING_TO_BANK — click the bank chest
     // ============================================================
-    private void tickWalkingToBank(Player player) {
+    private void tickWalkingToBank() {
         if (!GameFunctions.isInventoryFull()) {
             log.info("Inventory not full. Resuming");
             setState(State.IDLE);
             return;
         }
 
-        ObjectScanner.Target bank = findBank(player);
+        GameObject bank = ObjectScanner.findNearestGameObject(BANK_CHEST);
         if (bank == null) {
             log.debug("Bank chest not visible.");
             return;
         }
 
         log.info("Clicking bank chest.");
-        GameFunctions.clickObject(bank.getGameObject());
+        GameFunctions.clickObject(bank);
 
         depositClicked = false;
         bankOpenDeadline = Instant.now().plus(BANK_OPEN_TIMEOUT);
@@ -203,30 +195,19 @@ public class WoodcuttingBot {
         state = s;
     }
 
-    private ObjectScanner.Target pickPriorityTree(Player player) {
-        int plane = player.getWorldLocation().getPlane();
-        Map<WorldPoint, ObjectScanner.Target> byPos = new HashMap<>();
-        for (ObjectScanner.Target t : objectScanner.findGameObjects(Set.of(MAGIC_TREE))) {
-            WorldPoint wp = t.getWorldPosition();
-            if (wp != null && wp.getPlane() == plane && t.getGameObject() != null) {
-                byPos.put(wp, t);
+    private GameObject pickTree(Player player) {
+        int playerPlane = player.getWorldLocation().getPlane();
+        Map<WorldPoint, GameObject> byPos = new HashMap<>();
+        for (GameObject object : ObjectScanner.findGameObjects(Set.of(MAGIC_TREE))) {
+            WorldPoint wp = object.getWorldLocation();
+            if (wp.getPlane() == playerPlane) {
+                byPos.put(wp, object);
             }
         }
         for (int[] p : PRIORITY_TREES) {
-            WorldPoint wp = new WorldPoint(p[0], p[1], plane);
-            ObjectScanner.Target t = byPos.get(wp);
-            if (t != null) return t;
-        }
-        return null;
-    }
-
-    private ObjectScanner.Target findBank(Player player) {
-        int plane = player.getWorldLocation().getPlane();
-        WorldPoint bankPos = new WorldPoint(BANK_X, BANK_Y, plane);
-        for (ObjectScanner.Target t : objectScanner.findGameObjects(Set.of(BANK_CHEST))) {
-            if (bankPos.equals(t.getWorldPosition()) && t.getGameObject() != null) {
-                return t;
-            }
+            WorldPoint wp = new WorldPoint(p[0], p[1], playerPlane);
+            GameObject object = byPos.get(wp);
+            if (object != null) return object;
         }
         return null;
     }
