@@ -7,7 +7,6 @@ import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
-import net.runelite.api.widgets.WidgetInfo;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -26,18 +25,21 @@ public class GameFunctions {
     private GameFunctions(){}
 
     private static Instant waitingSince = null;
+    public static int skipTicks = 0;
     private static volatile Client client;
     private static final List<Point> inventoryCoords = new ArrayList<>();
     private static final Map<String, Point> buttonCoords = new LinkedHashMap<>();
+    private static final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
     public static void init(Client c)  {
         client = c;
         buttonCoords.put("protect melee", new Point(2155, 1245));
         buttonCoords.put("protect magic", new Point(2115, 1245));
         buttonCoords.put("protect ranged",new Point(2080, 1245));
+        buttonCoords.put("humidify",new Point(2105, 1155));
         buttonCoords.put("prayers",new Point(1950, 1395));
         buttonCoords.put("inventory",new Point(1885, 1395));
-        buttonCoords.put("magics",new Point(1980, 1395));
+        buttonCoords.put("spellbook",new Point(1980, 1395));
 
         for (int y = 1135; y <= 1345; y += 35) {
             for (int x = 2060; x <= 2180; x += 40) {
@@ -61,8 +63,14 @@ public class GameFunctions {
         return elapsed;
     }
 
+    public static void skipTicks(int ticks) { skipTicks = ticks; }
+
     public static Point getButton(String name) {
         return buttonCoords.get(name);
+    }
+
+    public static Point getInventorySlot(int slot) {
+        return inventoryCoords.get(slot);
     }
 
     public static void click(int leftRight, int x, int y) {
@@ -76,30 +84,30 @@ public class GameFunctions {
 
         ClickTracker.record(x, y, leftRight);
 
-        /*
-        // Get the system-wide AWT event queue once.
-        EventQueue eventQueue = Toolkit.getDefaultToolkit().getSystemEventQueue();
-        long now = System.currentTimeMillis();
-
-        // 1. Mouse Moved (optional, but often needed for hover state)
-        eventQueue.postEvent(new MouseEvent(canvas, MouseEvent.MOUSE_MOVED,
-                now, 0, x, y, 0, false, MouseEvent.NOBUTTON));
-
-        // 2. Mouse Pressed
-        eventQueue.postEvent(new MouseEvent(canvas, MouseEvent.MOUSE_PRESSED,
-                now, 0, x, y, 1, false, leftRight));
-
-        // 3. Mouse Released
-        eventQueue.postEvent(new MouseEvent(canvas, MouseEvent.MOUSE_RELEASED,
-                now, 0, x, y, 1, false, leftRight));
-         */
-
         canvas.dispatchEvent(new MouseEvent(canvas, MouseEvent.MOUSE_MOVED,
                 System.currentTimeMillis(), 0, x, y, 0, false));
         canvas.dispatchEvent(new MouseEvent(canvas, MouseEvent.MOUSE_PRESSED,
                 System.currentTimeMillis(), 0, x, y, 1, false, leftRight));
         canvas.dispatchEvent(new MouseEvent(canvas, MouseEvent.MOUSE_RELEASED,
                 System.currentTimeMillis(), 0, x, y, 1, false, leftRight));
+    }
+
+    public static boolean clickMultiple(int leftRight, int[][] coordinates, long delayMs) {
+        if (coordinates == null || coordinates.length == 0) return false;
+
+        for (int i = 0; i < coordinates.length; i++) {
+            final int x = coordinates[i][0];
+            final int y = coordinates[i][1];
+            final long delay = i * delayMs;
+            scheduler.schedule(() -> click(leftRight, x, y), delay, TimeUnit.MILLISECONDS);
+        }
+
+        return true;
+    }
+
+    public static boolean clickMultiple(int[][] coordinates, long delayMs) {
+        clickMultiple(MouseEvent.BUTTON1, coordinates, delayMs);
+        return true;
     }
 
     public static void walkToTile(WorldPoint targetTile) {
@@ -142,24 +150,40 @@ public class GameFunctions {
         log.info("clickWidget: clicked at ({}, {}) in canvas space", x, y);
     }
 
-    public static void clickObject(GameObject obj) {
+    public static boolean clickObject(TileObject obj) {
         if (obj == null) {
             log.warn("clickObject: obj is null");
-            return;
+            return false;
         }
 
-        int x, y;
         Shape hull = obj.getClickbox();
-        if (hull != null) {
-            Rectangle b = hull.getBounds();
-            if (b.width > 0 && b.height > 0) {
-                x = b.x + b.width / 2;
-                y = b.y + b.height / 2;
-                click(MouseEvent.BUTTON1, x, y);
-                return;
-            }
-            log.warn("clickObj: degenerate clickbox for id {}", obj.getId());
+        if (hull == null) {
+            log.warn("clickObject: no clickbox for id {} (not rendered)", obj.getId());
+            return false;
         }
+
+        Rectangle b = hull.getBounds();
+        if (b.width <= 0 || b.height <= 0) {
+            log.warn("clickObject: degenerate clickbox for id {} ({}x{})", obj.getId(), b.width, b.height);
+            return false;
+        }
+
+        int x = b.x + b.width / 2;
+        int y = b.y + b.height / 2;
+
+        Canvas canvas = client.getCanvas();
+        if (canvas == null) return false;
+
+        int cw = canvas.getWidth();
+        int ch = canvas.getHeight();
+        if (x < 0 || y < 0 || x >= cw || y >= ch) {
+            log.warn("clickObject: id {} off-canvas at ({},{}) canvas {}x{} clickbox ({},{},{},{})",
+                    obj.getId(), x, y, cw, ch, b.x, b.y, b.width, b.height);
+            return false;
+        }
+
+        click(MouseEvent.BUTTON1, x, y);
+        return true;
     }
 
     public static void clickNpc(NPC npc) {
@@ -247,11 +271,40 @@ public class GameFunctions {
                 now, 0, keyCode, KeyEvent.CHAR_UNDEFINED));
     }
 
+    public static void keyHold(int keyCode) {
+        Canvas canvas = client.getCanvas();
+        if (canvas == null) return;
+
+        EventQueue eventQueue = Toolkit.getDefaultToolkit().getSystemEventQueue();
+        long now = System.currentTimeMillis();
+
+        eventQueue.postEvent(new KeyEvent(canvas, KeyEvent.KEY_PRESSED,
+                now, 0, keyCode, KeyEvent.CHAR_UNDEFINED));
+    }
+
+    public static void keyRelease(int keyCode) {
+        Canvas canvas = client.getCanvas();
+        if (canvas == null) return;
+
+        EventQueue eventQueue = Toolkit.getDefaultToolkit().getSystemEventQueue();
+        long now = System.currentTimeMillis();
+
+        eventQueue.postEvent(new KeyEvent(canvas, KeyEvent.KEY_RELEASED,
+                now, 0, keyCode, KeyEvent.CHAR_UNDEFINED));
+    }
+
+    public static void keyPressDelayed(int[] keyCodes, long delayMs) {
+        for (int i = 0; i < keyCodes.length; i++) {
+            final int key = keyCodes[i];
+            final long delay = i * delayMs;
+            scheduler.schedule(() -> keyPress(key), delay, TimeUnit.MILLISECONDS);
+        }
+    }
+
     public static void typeText(String text){
         Canvas canvas = client.getCanvas();
         if (canvas == null) return;
 
-        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         long delay = 0;
 
         for (char c : text.toCharArray()) {
@@ -264,7 +317,6 @@ public class GameFunctions {
             delay += 50;
         }
 
-        // Shut down after all keys are dispatched
         scheduler.schedule(() -> scheduler.shutdown(), delay + 100, TimeUnit.MILLISECONDS);
     }
 
@@ -290,11 +342,6 @@ public class GameFunctions {
 
     public static boolean isBankOpen() {
         Widget w = client.getWidget(InterfaceID.Bankmain.ITEMS);
-        return w != null && !w.isHidden();
-    }
-
-    public static boolean isShopOpen() {
-        Widget w = client.getWidget(InterfaceID.Shopmain.ITEMS);
         return w != null && !w.isHidden();
     }
 
@@ -349,8 +396,7 @@ public class GameFunctions {
         return SPECIAL_KEYS.getOrDefault(c, KeyEvent.VK_UNDEFINED);
     }
 
-    public static Rectangle getCanvasBounds(Widget widget)
-    {
+    public static Rectangle getCanvasBounds(Widget widget) {
         if (widget == null) return null;
 
         Rectangle bounds = widget.getBounds();
@@ -372,5 +418,101 @@ public class GameFunctions {
         }
 
         return new Rectangle(x, y, bounds.width, bounds.height);
+    }
+
+    public static Point getBankItem(int itemId)
+    {
+        Widget bankItems = client.getWidget(InterfaceID.Bankmain.ITEMS);
+        if (bankItems == null || bankItems.isHidden())
+        {
+            return null;
+        }
+
+        Widget[] children = bankItems.getDynamicChildren();
+        for (Widget child : children)
+        {
+            if (child == null || child.isHidden())
+            {
+                continue;
+            }
+
+            if (child.getItemId() == itemId)
+            {
+                Point pos = child.getCanvasLocation();
+                return new Point(
+                        pos.getX() + child.getWidth() / 2,
+                        pos.getY() + child.getHeight() / 2
+                );
+            }
+        }
+
+        return null; // item not in bank
+    }
+
+    public static boolean stillExists(TileObject obj) {
+        if (obj.getWorldView() == null) return false;
+
+        LocalPoint lp = obj.getLocalLocation();
+        int sceneX = lp.getSceneX();
+        int sceneY = lp.getSceneY();
+        int plane = obj.getPlane();
+
+        Scene scene = obj.getWorldView().getScene();
+        if (sceneX < 0 || sceneX >= 104 || sceneY < 0 || sceneY >= 104) return false;
+
+        Tile tile = scene.getTiles()[plane][sceneX][sceneY];
+        if (tile == null) return false;
+
+        if (obj instanceof GameObject) {
+            for (GameObject go : tile.getGameObjects()) {
+                if (go != null && go.getId() == obj.getId()) return true;
+            }
+        } else if (obj instanceof WallObject) {
+            WallObject wall = tile.getWallObject();
+            return wall != null && wall.getId() == obj.getId();
+        } else if (obj instanceof GroundObject) {
+            GroundObject ground = tile.getGroundObject();
+            return ground != null && ground.getId() == obj.getId();
+        }
+
+        return false;
+    }
+
+    public static boolean isPlayerAtCoordinates(WorldPoint targetPoint){
+        Player player = client.getLocalPlayer();
+        WorldPoint playerPosition = player.getWorldLocation();
+        return playerPosition.equals(targetPoint);
+    }
+
+    public static final class Step {
+        final Runnable action;
+        final long delayMs;
+
+        private Step(long delayMs, Runnable action) {
+            this.delayMs = delayMs;
+            this.action = action;
+        }
+    }
+
+    public static Step step(long delayMs, Runnable action) {
+        return new Step(delayMs, action);
+    }
+
+    public static void runFunctions(long delayMs, Runnable... actions) {
+        if (actions == null) return;
+        for (int i = 0; i < actions.length; i++) {
+            final Runnable action = actions[i];
+            scheduler.schedule(action, i * delayMs, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    public static void runSequence(Step... steps) {
+        if (steps == null) return;
+        long cumulative = 0;
+        for (Step s : steps) {
+            cumulative += s.delayMs;
+            final Runnable action = s.action;
+            scheduler.schedule(action, cumulative, TimeUnit.MILLISECONDS);
+        }
     }
 }

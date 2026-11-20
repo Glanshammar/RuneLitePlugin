@@ -1,15 +1,16 @@
 package com.main.tests;
 
+import com.main.utils.ObjectScanner;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.Client;
-import net.runelite.api.InventoryID;
-import net.runelite.api.Item;
-import net.runelite.api.ItemContainer;
+import net.runelite.api.*;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.api.widgets.WidgetItem;
 
 import java.awt.*;
+import java.util.List;
+import java.util.Set;
 
 @Slf4j
 public class TestFunctions {

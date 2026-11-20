@@ -177,7 +177,22 @@ public class AntiBotDetector {
             return;
         }
 
+        if (lower.contains("2 + 2 - 1")) {
+            GameFunctions.typeText("3");
+            GameFunctions.keyPress(KeyEvent.VK_ENTER);
+            log.info("Anti-Bot - Answer is 3");
+            return;
+        }
+
+        if (lower.contains("10 + 19")) {
+            GameFunctions.typeText("29");
+            GameFunctions.keyPress(KeyEvent.VK_ENTER);
+            log.info("Anti-Bot - Answer is 29");
+            return;
+        }
+
         log.info("ANSWER: ? (unrecognized question type)");
+        checkDetected = false;
     }
 
     @Subscribe

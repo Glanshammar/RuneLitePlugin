@@ -1,245 +1,315 @@
 package com.main.utils;
 
-import com.main.ApexeaConfig;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
-import net.runelite.api.Point;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 
 import javax.swing.*;
 import java.util.*;
 import java.util.List;
-import java.util.function.IntPredicate;
+import java.util.function.Predicate;
 
 @Slf4j
 public class ObjectScanner {
+    private ObjectScanner(){}
 
-    private static final int SCENE_SIZE = 104;
+    private static volatile Client client;
 
-    private final Client client;
-    private final ApexeaConfig config;
-    public final Set<Integer> objectIds = new HashSet<>();
-
-    public ObjectScanner(Client client, ApexeaConfig config) {
-        this.client = client;
-        this.config = config;
-    }
-
-    public enum TargetType { OBJECT, NPC, GROUND_ITEM }
-
-    @lombok.Value
-    public static class Target {
-        TargetType type;
-        String name;
-        WorldPoint worldPosition;
-        int distance;
-        Point canvasPos;
-        int id;
-        GameObject gameObject;  // OBJECT only
-        NPC npc;                // NPC only
-        Tile tile;              // GROUND_ITEM only (needed by Clicker)
-        TileItem tileItem;      // GROUND_ITEM only
-    }
-
-    public void addObjectIds(Set<Integer> ids){
-        if (ids != null) {
-            objectIds.addAll(ids);
-        }
+    public static void init(Client c) {
+        client = c;
     }
 
     // ============================================================
     //  GAME OBJECTS
     // ============================================================
-    public List<Target> findGameObjects(Set<Integer> ids) {
-        return findObjectsMatching(id -> ids == null || ids.isEmpty() || ids.contains(id));
+    private static boolean matchesTarget(TileObject obj, Set<Integer> objectIds, Set<WorldPoint> targetLocations) {
+        if (objectIds != null && !objectIds.isEmpty() && !objectIds.contains(obj.getId())) {
+            return false;
+        }
+        WorldPoint wp = obj.getWorldLocation();
+        return wp != null && targetLocations.contains(wp);
     }
 
-    public Optional<GameObject> findNearestObject(Set<Integer> ids) {
-        return findGameObjects(ids).stream().findFirst().map(Target::getGameObject);
-    }
+    public static TileObject findObjectCoords(Set<Integer> objectIds, Collection<WorldPoint> locationList) {
+        if (locationList == null || locationList.isEmpty()) {
+            return null;
+        }
 
-    private List<Target> findObjectsMatching(IntPredicate filter) {
-        Player player = client.getLocalPlayer();
-        if (player == null) return Collections.emptyList();
-        WorldPoint playerPos = player.getWorldLocation();
-        if (playerPos == null) return Collections.emptyList();
         Scene scene = client.getScene();
-        if (scene == null) return Collections.emptyList();
+        if (scene == null || client.getLocalPlayer() == null) {
+            return null;
+        }
 
+        LocalPoint playerLocation = client.getLocalPlayer().getLocalLocation();
+        if (playerLocation == null) {
+            return null;
+        }
+
+        Set<WorldPoint> targetLocations = new HashSet<>(locationList);
+        List<TileObject> matchingObjects = new ArrayList<>();
         Tile[][][] tiles = scene.getTiles();
-        int plane = client.getPlane();
-        List<Target> results = new ArrayList<>();
-        Set<Long> seen = new HashSet<>();
 
-        for (int x = 0; x < SCENE_SIZE; x++) {
-            for (int y = 0; y < SCENE_SIZE; y++) {
-                Tile tile = tiles[plane][x][y];
-                if (tile == null) continue;
-                GameObject[] objects = tile.getGameObjects();
-                if (objects == null) continue;
+        for (Tile[][] value : tiles) {
+            for (int x = 0; x < value.length; x++) {
+                for (int y = 0; y < value[x].length; y++) {
+                    Tile tile = value[x][y];
+                    if (tile == null) {
+                        continue;
+                    }
 
-                for (GameObject obj : objects) {
-                    if (obj == null) continue;
-                    int id = obj.getId();
-                    if (id == -1) continue;
-                    if (!filter.test(id)) continue;
+                    // 1. Check GameObjects on the tile
+                    GameObject[] gameObjects = tile.getGameObjects();
+                    if (gameObjects != null) {
+                        for (GameObject obj : gameObjects) {
+                            if (obj != null && matchesTarget(obj, objectIds, targetLocations)) {
+                                matchingObjects.add(obj);
+                            }
+                        }
+                    }
 
-                    WorldPoint wp = obj.getWorldLocation();
-
-                    long key = ((long) id << 32) ^ ((long) wp.getX() << 16) ^ wp.getY();
-                    if (!seen.add(key)) continue;
-
-                    LocalPoint lp = LocalPoint.fromWorld(client, wp);
-                    if (lp == null) continue;
-                    Point cp = Perspective.localToCanvas(client, lp, plane);
-                    if (cp == null) continue;
-
-                    ObjectComposition def = client.getObjectDefinition(id);
-                    String name = (def != null && def.getName() != null) ? def.getName() : "Object";
-
-                    results.add(new Target(
-                            TargetType.OBJECT, name, wp,
-                            playerPos.distanceTo(wp), cp, id,
-                            obj, null, null, null
-                    ));
+                    // 2. Check WallObject on the tile
+                    WallObject wallObject = tile.getWallObject();
+                    if (wallObject != null && matchesTarget(wallObject, objectIds, targetLocations)) {
+                        matchingObjects.add(wallObject);
+                    }
                 }
             }
         }
-        results.sort(Comparator.comparingInt(Target::getDistance));
-        return results;
+
+        if (matchingObjects.isEmpty()) {
+            return null;
+        }
+
+        return matchingObjects.stream()
+                .filter(obj -> obj.getLocalLocation() != null)
+                .min(Comparator.comparingInt(obj -> obj.getLocalLocation().distanceTo(playerLocation)))
+                .orElse(null);
     }
 
+    public static List<GameObject> findGameObjects(Set<Integer> objectIds, Predicate<GameObject> filter) {
+        List<GameObject> foundObjects = new ArrayList<>();
+        Scene scene = client.getScene();
+        if (scene == null) {
+            return foundObjects;
+        }
+
+        Tile[][][] tiles = scene.getTiles();
+        for (int z = 0; z < tiles.length; z++) {
+            for (int x = 0; x < tiles[z].length; x++) {
+                for (int y = 0; y < tiles[z][x].length; y++) {
+                    Tile tile = tiles[z][x][y];
+                    if (tile == null) {
+                        continue;
+                    }
+
+                    GameObject[] gameObjects = tile.getGameObjects();
+                    if (gameObjects != null) {
+                        for (GameObject obj : gameObjects) {
+                            if (obj != null && objectIds.contains(obj.getId())) {
+                                // Apply the filter if present
+                                if (filter == null || filter.test(obj)) {
+                                    foundObjects.add(obj);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return foundObjects;
+    }
+
+    public static List<WallObject> findWallObjects(Set<Integer> objectIds, Predicate<WallObject> filter) {
+        List<WallObject> foundObjects = new ArrayList<>();
+        Scene scene = client.getScene();
+        if (scene == null) {
+            return foundObjects;
+        }
+
+        Tile[][][] tiles = scene.getTiles();
+        for (int z = 0; z < tiles.length; z++) {
+            for (int x = 0; x < tiles[z].length; x++) {
+                for (int y = 0; y < tiles[z][x].length; y++) {
+                    Tile tile = tiles[z][x][y];
+                    if (tile == null) {
+                        continue;
+                    }
+
+                    WallObject wallObject = tile.getWallObject();
+                    if (wallObject != null && (objectIds == null || objectIds.contains(wallObject.getId()))) {
+                        if (filter == null || filter.test(wallObject)) {
+                            foundObjects.add(wallObject);
+                        }
+                    }
+                }
+            }
+        }
+        return foundObjects;
+    }
+
+    public static boolean objectExistsAt(Set<Integer> objectIds, WorldPoint location) {
+        if (objectIds == null || objectIds.isEmpty() || location == null) return false;
+
+        if (client == null) return false;
+
+        Scene scene = client.getScene();
+        if (scene == null) return false;
+
+        LocalPoint lp = LocalPoint.fromWorld(client, location);
+        if (lp == null) return false;               // off-scene / not loaded
+
+        int plane = location.getPlane();
+        int sx = lp.getSceneX();
+        int sy = lp.getSceneY();
+        if (plane < 0 || plane >= 4) return false;
+        if (sx < 0 || sx >= 104 || sy < 0 || sy >= 104) return false;
+
+        Tile[][][] tiles = scene.getTiles();
+        Tile tile = tiles[plane][sx][sy];
+        if (tile == null) return false;
+
+        GameObject[] gameObjects = tile.getGameObjects();
+        if (gameObjects != null) {
+            for (GameObject obj : gameObjects) {
+                if (obj != null && objectIds.contains(obj.getId())) return true;
+            }
+        }
+
+        WallObject wall = tile.getWallObject();
+        return wall != null && objectIds.contains(wall.getId());
+    }
+
+    public static boolean objectExistsAt(int objectId, WorldPoint location) {
+        return objectExistsAt(Set.of(objectId), location);
+    }
+
+    // ###############################
+    // Game object helpers
+    // ###############################
+    public static List<GameObject> findGameObjects(Set<Integer> objectIds) {
+        return findGameObjects(objectIds, null);
+    }
+
+    public static List<GameObject> findGameObjects(int objectId) {
+        return findGameObjects(Set.of(objectId), null);
+    }
+
+    public static GameObject findNearestGameObject(Set<Integer> objectIds, Predicate<GameObject> filter) {
+        // Reuse the main finder function with filters
+        List<GameObject> matchingObjects = findGameObjects(objectIds, filter);
+
+        if (matchingObjects.isEmpty() || client.getLocalPlayer() == null) {
+            return null;
+        }
+
+        LocalPoint playerLocation = client.getLocalPlayer().getLocalLocation();
+        if (playerLocation == null) {
+            return null;
+        }
+
+        // Find the object with the minimum distance to the local player
+        return matchingObjects.stream()
+                .min(Comparator.comparingInt(obj -> obj.getLocalLocation().distanceTo(playerLocation)))
+                .orElse(null);
+    }
+
+    public static GameObject findNearestGameObject(int objectId){
+        return findNearestGameObject(Set.of(objectId), null);
+    }
+
+    public static GameObject findNearestGameObject(Set<Integer> objectIds){
+        return findNearestGameObject(objectIds, null);
+    }
+
+    // ###############################
+    // Wall object helpers
+    // ###############################
+    public static List<WallObject> findWallObjects(Set<Integer> objectIds) {
+        return findWallObjects(objectIds, null);
+    }
+
+    public static List<WallObject> findWallObjects(int objectId) {
+        return findWallObjects(Set.of(objectId), null);
+    }
+
+    public static WallObject findNearestWallObject(Set<Integer> objectIds, Predicate<WallObject> filter) {
+        List<WallObject> matchingObjects = findWallObjects(objectIds, filter);
+
+        if (matchingObjects.isEmpty() || client.getLocalPlayer() == null) {
+            return null;
+        }
+
+        LocalPoint playerLocation = client.getLocalPlayer().getLocalLocation();
+        if (playerLocation == null) {
+            return null;
+        }
+
+        return matchingObjects.stream()
+                .filter(obj -> obj.getLocalLocation() != null)
+                .min(Comparator.comparingInt(obj -> obj.getLocalLocation().distanceTo(playerLocation)))
+                .orElse(null);
+    }
+
+    public static WallObject findNearestWallObject(int objectId) {
+        return findNearestWallObject(Set.of(objectId), null);
+    }
+
+    public static WallObject findNearestWallObject(Set<Integer> objectIds) {
+        return findNearestWallObject(objectIds, null);
+    }
     // ============================================================
     //  NPCs
     // ============================================================
-    public List<Target> findNpcs(Set<Integer> ids) {
-        return findNpcsMatching(id -> ids == null || ids.isEmpty() || ids.contains(id));
-    }
-
-    public Optional<NPC> findNearestNpc(Set<Integer> ids) {
-        return findNpcs(ids).stream().findFirst().map(Target::getNpc);
-    }
-
-    public NPC findNpc(int npcId, Player player) {
-        int plane = player.getWorldLocation().getPlane();
-        NPC best = null;
-        int bestDist = Integer.MAX_VALUE;
-        for (NPC npc : client.getNpcs()) {
-            if (npc == null || npc.getId() != npcId) continue;
-            WorldPoint wp = npc.getWorldLocation();
-            if (wp == null || wp.getPlane() != plane) continue;
-            int d = player.getWorldLocation().distanceTo(wp);
-            if (d < bestDist) { bestDist = d; best = npc; }
+    public static List<NPC> findNpcs(Client client, Set<Integer> npcIds, Predicate<NPC> filter) {
+        List<NPC> foundNpcs = new ArrayList<>();
+        List<NPC> clientNpcs = client.getNpcs();
+        if (clientNpcs == null) {
+            return foundNpcs;
         }
-        return best;
-    }
 
-    private List<Target> findNpcsMatching(IntPredicate filter) {
-        Player player = client.getLocalPlayer();
-        if (player == null) return Collections.emptyList();
-        WorldPoint playerPos = player.getWorldLocation();
-        if (playerPos == null) return Collections.emptyList();
-        List<NPC> npcs = client.getNpcs();
-        if (npcs == null) return Collections.emptyList();
-        int plane = client.getPlane();
-
-        List<Target> results = new ArrayList<>();
-        for (NPC npc : npcs) {
-            if (npc == null) continue;
-            if (!filter.test(npc.getId())) continue;
-
-            WorldPoint wp = npc.getWorldLocation();
-            if (wp == null) continue;
-            if (wp.getPlane() != plane) continue; // ignore NPCs on other planes
-
-            LocalPoint lp = npc.getLocalLocation();
-            if (lp == null) continue;
-            Point cp = Perspective.localToCanvas(client, lp, plane);
-            if (cp == null) continue;
-
-            String name = npc.getName() != null ? npc.getName() : "NPC";
-            results.add(new Target(
-                    TargetType.NPC, name, wp,
-                    playerPos.distanceTo(wp), cp, npc.getId(),
-                    null, npc, null, null
-            ));
-        }
-        results.sort(Comparator.comparingInt(Target::getDistance));
-        return results;
-    }
-
-    // ============================================================
-    //  GROUND ITEMS
-    // ============================================================
-    public List<Target> findGroundItems(Set<Integer> ids) {
-        return findGroundItemsMatching(id -> ids == null || ids.isEmpty() || ids.contains(id));
-    }
-
-    public Optional<Target> findNearestGroundItem(Set<Integer> ids) {
-        return findGroundItems(ids).stream().findFirst();
-    }
-
-    private List<Target> findGroundItemsMatching(IntPredicate filter) {
-        Player player = client.getLocalPlayer();
-        if (player == null) return Collections.emptyList();
-        WorldPoint playerPos = player.getWorldLocation();
-        if (playerPos == null) return Collections.emptyList();
-        Scene scene = client.getScene();
-        if (scene == null) return Collections.emptyList();
-
-        Tile[][][] tiles = scene.getTiles();
-        int plane = client.getPlane();
-        List<Target> results = new ArrayList<>();
-
-        for (int x = 0; x < SCENE_SIZE; x++) {
-            for (int y = 0; y < SCENE_SIZE; y++) {
-                Tile tile = tiles[plane][x][y];
-                if (tile == null) continue;
-                List<TileItem> items = tile.getGroundItems();
-                if (items == null || items.isEmpty()) continue;
-
-                WorldPoint wp = tile.getWorldLocation();
-                if (wp == null) continue;
-                LocalPoint lp = tile.getLocalLocation();
-                if (lp == null) continue;
-                Point cp = Perspective.localToCanvas(client, lp, plane);
-                if (cp == null) continue;
-
-                for (TileItem item : items) {
-                    if (item == null) continue;
-                    if (!filter.test(item.getId())) continue;
-
-                    ItemComposition def = client.getItemDefinition(item.getId());
-                    String name = def.getName() != null ? def.getName() : "Item";
-
-                    results.add(new Target(
-                            TargetType.GROUND_ITEM, name, wp,
-                            playerPos.distanceTo(wp), cp, item.getId(),
-                            null, null, tile, item
-                    ));
+        for (NPC npc : clientNpcs) {
+            if (npc != null && npcIds.contains(npc.getId())) {
+                // Apply the filter if present
+                if (filter == null || filter.test(npc)) {
+                    foundNpcs.add(npc);
                 }
             }
         }
-        results.sort(Comparator.comparingInt(Target::getDistance));
-        return results;
+        return foundNpcs;
     }
 
-    // ============================================================
-    //  COMBINED
-    // ============================================================
-    public List<Target> findAll(Set<Integer> objectIds,
-                                Set<Integer> npcIds,
-                                Set<Integer> itemIds) {
-        List<Target> all = new ArrayList<>();
-        if (objectIds != null && !objectIds.isEmpty()) all.addAll(findGameObjects(objectIds));
-        if (npcIds != null && !npcIds.isEmpty())     all.addAll(findNpcs(npcIds));
-        if (itemIds != null && !itemIds.isEmpty())   all.addAll(findGroundItems(itemIds));
-        all.sort(Comparator.comparingInt(Target::getDistance));
-        return all;
+    public static List<NPC> findNpcs(Set<Integer> npcIds) {
+        return findNpcs(client, npcIds, null);
     }
 
-    public List<Target> findAll(Set<Integer> ids) {
-        return findAll(ids, ids, ids);
+    public static NPC findNearestNpc(Set<Integer> npcIds, Predicate<NPC> filter) {
+        // Reuse the main finder function with filters
+        List<NPC> matchingNpcs = findNpcs(client, npcIds, filter);
+
+        if (matchingNpcs.isEmpty() || client.getLocalPlayer() == null) {
+            return null;
+        }
+
+        LocalPoint playerLocation = client.getLocalPlayer().getLocalLocation();
+        if (playerLocation == null) {
+            return null;
+        }
+
+        // Find the NPC with the minimum distance to the local player
+        return matchingNpcs.stream()
+                .min(Comparator.comparingInt(npc -> {
+                    LocalPoint npcLoc = npc.getLocalLocation();
+                    return npcLoc != null ? npcLoc.distanceTo(playerLocation) : Integer.MAX_VALUE;
+                }))
+                .orElse(null);
+    }
+
+    public static NPC findNearestNpc(Set<Integer> npcIds){
+        return findNearestNpc(npcIds, null);
+    }
+
+    public static NPC findNearestNpc(int npcId){
+        return findNearestNpc(Set.of(npcId), null);
     }
 }

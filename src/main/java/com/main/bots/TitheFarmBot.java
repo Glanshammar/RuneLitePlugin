@@ -8,6 +8,8 @@ import net.runelite.api.*;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.events.VarbitChanged;
+import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.eventbus.Subscribe;
 
 import java.util.List;
@@ -141,6 +143,13 @@ public class TitheFarmBot {
                 break;
             case HARVEST:
                 tickHarvesting(player);
+        }
+    }
+
+    @Subscribe
+    public void onVarbitChanged(VarbitChanged event) {
+        if (event.getVarbitId() == VarbitID.ZEAH_WATERINGCAN_CHARGES) {
+            int charges = client.getVarbitValue(VarbitID.ZEAH_WATERINGCAN_CHARGES);
         }
     }
 
